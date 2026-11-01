@@ -344,6 +344,33 @@ class JournalTab extends Component
                     'displayDate' => $groupDate,
                 ];
             })
+            ->sortBy(function ($item) {
+                $first = $item['rows']->first();
+
+                return ($first->firstVoucher ?? '').'|'.mb_strtolower(trim((string) $first->description));
+            })
+            ->values();
+
+        // Assign sequential voucher numbers per prefix and business unit so summary entries are consecutive
+        $counters = [];
+        foreach ($groups as $group) {
+            $first = $group['rows']->first();
+            $origVoucher = (string) ($first->firstVoucher ?? '');
+            $prefix = VoucherNumber::prefixOf($origVoucher);
+            if (! $prefix) {
+                continue;
+            }
+
+            $scopeKey = ($first->business_unit_id ?? 'bumdes').'|'.$prefix;
+            $counters[$scopeKey] = ($counters[$scopeKey] ?? 0) + 1;
+            $newVoucher = $prefix.str_pad((string) $counters[$scopeKey], 3, '0', STR_PAD_LEFT);
+
+            foreach ($group['rows'] as $row) {
+                $row->firstVoucher = $newVoucher;
+            }
+        }
+
+        $groups = $groups
             ->sortBy(function ($item) use ($sortField) {
                 $key = match ($sortField) {
                     'voucher_number' => ($item['rows']->first()->firstVoucher ?? '').'|'.mb_strtolower(trim((string) $item['rows']->first()->description)),
