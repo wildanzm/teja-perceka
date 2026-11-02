@@ -14,39 +14,54 @@ class BumdesCashBalance
     /**
      * Calculate BUMDes opening cash balance prior to the given start date.
      *
-     * Same journal-ledger source as the unit income views and Laba Rugi:
-     * prior unit net = prior revenue journals - prior expense journals.
-     * Opening Balance = (Total Prior Unit Net + Manual BUMDes Income) - Prior BUMDes Expenses (KBM).
+     * Scope mirrors Laba Rugi exactly: KBM vouchers + manual DBM (unit-less,
+     * no daily transaction) journals, plus every unit leg (daily legs and
+     * manually recorded unit journals). Previously this only counted
+     * daily_transaction legs, so manual unit expense journals (e.g. KSC)
+     * were included in Laba Rugi's net income but missing from the next
+     * month's "Saldo Kas" — the two reports disagreed.
      */
     public static function getOpeningBalance(Carbon|string $startDate): float
     {
         $day = Carbon::parse($startDate)->startOfDay()->format('Y-m-d');
 
-        // Unit legs only (daily_transaction_id set): manual BUMDes income and
-        // KBM expenses have their own legs below and must not be double counted.
-        $revenue = (float) JournalEntry::whereDate('transaction_date', '<', $day)
-            ->whereNotNull('daily_transaction_id')
+        // BUMDes-scope journals: KBM + manual DBM (unit-less).
+        $base = JournalEntry::whereDate('transaction_date', '<', $day)
+            ->where(function ($query) {
+                $query->where('voucher_number', 'like', 'KBM%')
+                    ->orWhere(function ($sub) {
+                        $sub->where('voucher_number', 'like', 'DBM%')
+                            ->whereNull('daily_transaction_id')
+                            ->whereNull('business_unit_id');
+                    });
+            });
+
+        $revenue = (float) (clone $base)
             ->whereHas('account', fn ($query) => $query->whereIn('type', ['pendapatan', 'pendapatan_lain']))
             ->sum(DB::raw('credit - debit'));
-        $expenses = (float) JournalEntry::whereDate('transaction_date', '<', $day)
-            ->whereNotNull('daily_transaction_id')
+        $expenses = (float) (clone $base)
             ->whereHas('account', fn ($query) => $query->whereIn('type', ['hpp', 'beban', 'beban_lain']))
             ->sum(DB::raw('debit - credit'));
-        $unitNet = max(0.0, $revenue - $expenses);
 
-        $manualBumdesIncome = (float) JournalEntry::where('voucher_number', 'like', 'DBM%')
-            ->whereNull('daily_transaction_id')
-            ->whereNull('business_unit_id')
-            ->whereHas('account', fn ($query) => $query->whereIn('code', ['1-1100', '1-1200']))
-            ->whereDate('transaction_date', '<', $day)
-            ->sum('debit');
+        // Unit legs: daily legs plus manually recorded unit journals.
+        // KBM legs are excluded here — they live in the BUMDes scope above.
+        $unitLegs = JournalEntry::whereDate('transaction_date', '<', $day)
+            ->where(function ($query) {
+                $query->whereNotNull('daily_transaction_id')
+                    ->orWhere(function ($sub) {
+                        $sub->whereNotNull('business_unit_id')
+                            ->where('voucher_number', 'not like', 'KBM%');
+                    });
+            });
 
-        $bumdesExpenses = (float) JournalEntry::where('voucher_number', 'like', 'KBM%')
-            ->whereHas('account', fn ($query) => $query->whereIn('code', ['1-1100', '1-1200']))
-            ->whereDate('transaction_date', '<', $day)
-            ->sum('credit');
+        $unitRevenue = (float) (clone $unitLegs)
+            ->whereHas('account', fn ($query) => $query->whereIn('type', ['pendapatan', 'pendapatan_lain']))
+            ->sum(DB::raw('credit - debit'));
+        $unitExpenses = (float) (clone $unitLegs)
+            ->whereHas('account', fn ($query) => $query->whereIn('type', ['hpp', 'beban', 'beban_lain']))
+            ->sum(DB::raw('debit - credit'));
 
-        $openingBalance = ($unitNet + $manualBumdesIncome) - $bumdesExpenses;
+        $openingBalance = ($revenue + $unitRevenue) - ($expenses + $unitExpenses);
 
         return max(0.0, $openingBalance);
     }
