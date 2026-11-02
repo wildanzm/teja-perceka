@@ -25,7 +25,7 @@ class VoucherNumber
         return [
             'prefix' => $prefix,
             'number' => $number,
-            'sequence' => (int) substr($number, -3),
+            'sequence' => (int) substr($number, strlen($prefix)),
         ];
     }
 
@@ -61,7 +61,8 @@ class VoucherNumber
             ->lockForUpdate()
             ->orderBy('transaction_date')
             ->orderBy('id')
-            ->get(['id', 'voucher_number', 'transaction_date', 'daily_transaction_id', 'description']);
+            ->get(['id', 'voucher_number', 'transaction_date', 'daily_transaction_id', 'description'])
+            ->filter(fn ($row) => self::prefixOf((string) $row->voucher_number) === $prefix);
 
         $pairs = $rows
             ->groupBy(fn ($row) => $row->voucher_number.'|'.($row->daily_transaction_id ?? 'null').'|'.$row->description)
@@ -90,6 +91,10 @@ class VoucherNumber
      */
     public static function nextBatch(string $prefix, string $date, int $count, ?int $businessUnitId = null): array
     {
+        if ($count < 1) {
+            throw new \InvalidArgumentException('Batch voucher minimal 1.');
+        }
+
         return DB::transaction(function () use ($prefix, $date, $count, $businessUnitId) {
             $day = Carbon::parse($date)->format('Y-m-d');
 
@@ -109,6 +114,10 @@ class VoucherNumber
             // of distinct transactions got merged under one number.
             $vouchers = [];
             foreach ((clone $query)->orderBy('transaction_date')->orderBy('id')->get(['id', 'voucher_number', 'transaction_date', 'daily_transaction_id', 'description']) as $row) {
+                if (self::prefixOf((string) $row->voucher_number) !== $prefix) {
+                    continue;
+                }
+
                 $key = $row->voucher_number;
                 $vouchers[$key]['date'] ??= Carbon::parse($row->transaction_date)->format('Y-m-d');
                 $vouchers[$key]['ids'][] = $row->id;
@@ -148,7 +157,7 @@ class VoucherNumber
 
             // Shift backwards (largest first) to avoid name collisions.
             for ($i = count($ordered) - 1; $i >= $k; $i--) {
-                $old = (int) substr(array_keys($vouchers)[$i], -3);
+                $old = (int) substr(array_keys($vouchers)[$i], strlen($prefix));
                 JournalEntry::whereIn('id', $ordered[$i]['ids'])
                     ->update(['voucher_number' => $prefix.str_pad($old + $count, 3, '0', STR_PAD_LEFT)]);
             }
@@ -160,12 +169,12 @@ class VoucherNumber
             // an earlier deletion left a gap in the sequence.
             $maxExisting = 0;
             foreach (array_keys($vouchers) as $key) {
-                $maxExisting = max($maxExisting, (int) substr($key, -3));
+                $maxExisting = max($maxExisting, (int) substr($key, strlen($prefix)));
             }
             $isAppend = $k >= count($ordered);
             $base = $isAppend
                 ? max($maxExisting, $baseOffset + $k)
-                : (int) substr(array_keys($vouchers)[$k], -3);
+                : (int) substr(array_keys($vouchers)[$k], strlen($prefix));
 
             // Middle inserts reuse the number vacated by the shift above,
             // appends continue after the highest number.

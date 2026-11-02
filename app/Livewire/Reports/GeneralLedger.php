@@ -129,35 +129,31 @@ class GeneralLedger extends Component
                 $normalBalance = $this->getNormalBalanceType($selectedAccount->type);
                 [$startDate, $endDate] = $this->periodRange();
 
-                // Calculate opening balance (before start date)
-                $openingQuery = JournalEntry::where('account_id', $this->account_id)
-                    ->whereDate('transaction_date', '<', $startDate->format('Y-m-d'));
+                // Only the BUMDes ledger carries a prior-period balance: unit
+                // ledgers restart at zero each month, and BUMDes cash is
+                // already summarized by the virtual "Saldo Kas" row (DBM001),
+                // so adding it here too would count it twice.
+                $carriesOpening = $this->isBumdesScope()
+                    && ! in_array($selectedAccount->code, ['1-1100', '1-1200'], true);
 
-                if ($this->isBumdesScope()) {
-                    $openingQuery->where(function ($q) {
-                        $q->where('voucher_number', 'like', 'KBM%')
-                            ->orWhere(function ($sub) {
-                                $sub->where('voucher_number', 'like', 'DBM%')
-                                    ->whereNull('daily_transaction_id')
-                                    ->whereNull('business_unit_id');
-                            });
-                    });
-                } elseif ($this->unit_id && is_numeric($this->unit_id)) {
-                    $openingQuery->where('business_unit_id', (int) $this->unit_id);
-                }
+                if ($carriesOpening) {
+                    $openingQuery = JournalEntry::where('account_id', $this->account_id)
+                        ->whereDate('transaction_date', '<', $startDate->format('Y-m-d'))
+                        ->where(function ($q) {
+                            $q->where('voucher_number', 'like', 'KBM%')
+                                ->orWhere(function ($sub) {
+                                    $sub->where('voucher_number', 'like', 'DBM%')
+                                        ->whereNull('daily_transaction_id')
+                                        ->whereNull('business_unit_id');
+                                });
+                        });
 
-                $openingDebit = (clone $openingQuery)->sum('debit');
-                $openingCredit = (clone $openingQuery)->sum('credit');
+                    $openingDebit = (clone $openingQuery)->sum('debit');
+                    $openingCredit = (clone $openingQuery)->sum('credit');
 
-                if ($normalBalance === 'debit') {
-                    $openingBalance = $openingDebit - $openingCredit;
-                } else {
-                    $openingBalance = $openingCredit - $openingDebit;
-                }
-
-                // BUMDes scope: add saldo sebelumnya to cash accounts
-                if ($this->isBumdesScope() && in_array($selectedAccount->code, ['1-1100', '1-1200'])) {
-                    $openingBalance += BumdesCashBalance::getOpeningBalance($startDate);
+                    $openingBalance = $normalBalance === 'debit'
+                        ? $openingDebit - $openingCredit
+                        : $openingCredit - $openingDebit;
                 }
 
                 // Get current transactions

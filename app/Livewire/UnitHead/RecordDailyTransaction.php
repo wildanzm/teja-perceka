@@ -412,9 +412,6 @@ class RecordDailyTransaction extends Component
             // Regenerate income journals only. Expense vouchers (K prefix)
             // linked to this header must survive an income edit; wiping them
             // orphans the header expense total from the ledger.
-            // Regenerate income journals only. Expense vouchers (K prefix)
-            // linked to this header must survive an income edit; wiping them
-            // orphans the header expense total from the ledger.
             JournalEntry::where('daily_transaction_id', $transaction->id)
                 ->where('voucher_number', 'like', 'D%')
                 ->delete();
