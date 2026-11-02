@@ -154,19 +154,26 @@ class VoucherNumber
             }
 
             // Pure appends continue after the highest existing number so gaps
-            // left by deletions can never collide. Middle inserts keep the
-            // chronological slot freed by the shift above.
+            // left by deletions can never collide. Middle inserts take over
+            // the slot number vacated by the shifted voucher — using the
+            // positional index here collides with an existing number whenever
+            // an earlier deletion left a gap in the sequence.
             $maxExisting = 0;
             foreach (array_keys($vouchers) as $key) {
                 $maxExisting = max($maxExisting, (int) substr($key, -3));
             }
-            $base = $k >= count($ordered)
+            $isAppend = $k >= count($ordered);
+            $base = $isAppend
                 ? max($maxExisting, $baseOffset + $k)
-                : $baseOffset + $k;
+                : (int) substr(array_keys($vouchers)[$k], -3);
+
+            // Middle inserts reuse the number vacated by the shift above,
+            // appends continue after the highest number.
+            $start = $isAppend ? $base + 1 : $base;
 
             $numbers = [];
-            for ($i = 1; $i <= $count; $i++) {
-                $numbers[] = $prefix.str_pad($base + $i, 3, '0', STR_PAD_LEFT);
+            for ($i = 0; $i < $count; $i++) {
+                $numbers[] = $prefix.str_pad($start + $i, 3, '0', STR_PAD_LEFT);
             }
 
             return $numbers;

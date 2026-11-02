@@ -420,11 +420,13 @@ class RecordDailyTransaction extends Component
                 ->delete();
             $this->createJournalEntries($transaction, $date);
 
-            // A cross-month move leaves a gap in the old month: close it.
-            // (The new month is numbered correctly by createJournalEntries.)
+            // Regenerating in place frees the edited voucher's old number and
+            // shifts the later ones, leaving a gap (e.g. DBS001, DBS003).
+            // Always renumber the touched scope(s) so 001..N stays contiguous.
+            $unitCode = strtoupper($this->unit->code ?? 'XX');
             $newMonth = $date->format('Y-m');
+            VoucherNumber::renumberScope('D'.$unitCode, $newMonth, $this->unitId);
             if ($newMonth !== $oldMonth) {
-                $unitCode = strtoupper($this->unit->code ?? 'XX');
                 VoucherNumber::renumberScope('D'.$unitCode, $oldMonth, $this->unitId);
             }
 
