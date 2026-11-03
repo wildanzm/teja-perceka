@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Models\Account;
 use App\Models\BusinessUnit;
 use App\Models\JournalEntry;
+use App\Models\OpeningBalance;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -63,7 +64,13 @@ class BumdesCashBalance
 
         $openingBalance = ($revenue + $unitRevenue) - ($expenses + $unitExpenses);
 
-        return max(0.0, $openingBalance);
+        // Manual opening balances (cash carried in from before the app
+        // started) apply from their month onward.
+        $start = Carbon::parse($startDate);
+        $manualOpening = (float) OpeningBalance::where('period', '<=', $start->format('Y-m'))
+            ->sum('amount');
+
+        return max(0.0, $openingBalance + $manualOpening);
     }
 
     /**
