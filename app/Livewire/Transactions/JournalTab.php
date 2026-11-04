@@ -58,9 +58,13 @@ class JournalTab extends Component
     #[Reactive]
     public string $viewMode = 'detailed';
 
+    /** Free-text filter from the parent filter card: description, voucher number, account code, or account name. */
+    #[Reactive]
+    public string $search = '';
+
     public function updating(string $name, mixed $value): void
     {
-        if (in_array($name, ['unitId', 'mode', 'transactionDate', 'week', 'month', 'semester', 'semesterYear', 'year', 'sortField', 'sortDirection', 'viewMode'], true)) {
+        if (in_array($name, ['unitId', 'mode', 'transactionDate', 'week', 'month', 'semester', 'semesterYear', 'year', 'sortField', 'sortDirection', 'viewMode', 'search'], true)) {
             $this->resetPage();
         }
     }
@@ -113,6 +117,56 @@ class JournalTab extends Component
         }
 
         return $query;
+    }
+
+    /**
+     * Normalized, length-capped search term shared by SQL and in-memory filters.
+     */
+    private function searchTerm(): string
+    {
+        return mb_substr(trim($this->search), 0, 100);
+    }
+
+    /**
+     * Apply free-text search on description, voucher number, and account.
+     */
+    private function applySearch($query)
+    {
+        $term = $this->searchTerm();
+        if ($term === '') {
+            return $query;
+        }
+
+        $like = '%'.$term.'%';
+
+        return $query->where(function ($q) use ($like) {
+            $q->where('journal_entries.description', 'like', $like)
+                ->orWhere('journal_entries.voucher_number', 'like', $like)
+                ->orWhereHas('account', function ($accountQuery) use ($like) {
+                    $accountQuery->where('code', 'like', $like)
+                        ->orWhere('name', 'like', $like);
+                });
+        });
+    }
+
+    /**
+     * Filter in-memory journals (including BUMDes virtual entries) by the same term.
+     */
+    private function filterSearchCollection(Collection $journals): Collection
+    {
+        $term = mb_strtolower($this->searchTerm());
+        if ($term === '') {
+            return $journals;
+        }
+
+        return $journals->filter(function ($journal) use ($term) {
+            $haystack = mb_strtolower(implode(' ', array_map(
+                fn ($value) => (string) $value,
+                [$journal->voucher_number, $journal->description, $journal->account?->code, $journal->account?->name]
+            )));
+
+            return str_contains($haystack, $term);
+        })->values();
     }
 
     // ── Delete state ──────────────────────────────────────────────────────────
@@ -207,6 +261,7 @@ class JournalTab extends Component
             ->orderBy('id', $sortDirection);
 
         $this->applyRoleScope($query);
+        $this->applySearch($query);
 
         if ($this->isBumdesScope()) {
             $dbTransactions = $query->get();
@@ -218,6 +273,7 @@ class JournalTab extends Component
                 $sortField,
                 $sortDirection
             );
+            $allTransactions = $this->filterSearchCollection($allTransactions);
 
             $page = LengthAwarePaginator::resolveCurrentPage();
             $perPage = 40;
@@ -301,6 +357,7 @@ class JournalTab extends Component
             ->groupBy($key, 'journal_entries.account_id', 'journal_entries.business_unit_id', 'accounts.code', 'accounts.name', 'business_units.name', DB::raw('SUBSTR(journal_entries.transaction_date, 1, 7)'));
 
         $this->applyRoleScope($query);
+        $this->applySearch($query);
 
         $rows = $query->get();
 
@@ -351,22 +408,25 @@ class JournalTab extends Component
             })
             ->values();
 
-        // Assign sequential voucher numbers per prefix and business unit so summary entries are consecutive
-        $counters = [];
-        foreach ($groups as $group) {
-            $first = $group['rows']->first();
-            $origVoucher = (string) ($first->firstVoucher ?? '');
-            $prefix = VoucherNumber::prefixOf($origVoucher);
-            if (! $prefix) {
-                continue;
-            }
+        // Assign sequential voucher numbers per prefix and business unit so summary entries are consecutive.
+        // Filtered results keep their real numbers: renumbering a subset would restart at 001 and no longer match the ledger.
+        if ($this->searchTerm() === '') {
+            $counters = [];
+            foreach ($groups as $group) {
+                $first = $group['rows']->first();
+                $origVoucher = (string) ($first->firstVoucher ?? '');
+                $prefix = VoucherNumber::prefixOf($origVoucher);
+                if (! $prefix) {
+                    continue;
+                }
 
-            $scopeKey = ($first->business_unit_id ?? 'bumdes').'|'.$prefix;
-            $counters[$scopeKey] = ($counters[$scopeKey] ?? 0) + 1;
-            $newVoucher = $prefix.str_pad((string) $counters[$scopeKey], 3, '0', STR_PAD_LEFT);
+                $scopeKey = ($first->business_unit_id ?? 'bumdes').'|'.$prefix;
+                $counters[$scopeKey] = ($counters[$scopeKey] ?? 0) + 1;
+                $newVoucher = $prefix.str_pad((string) $counters[$scopeKey], 3, '0', STR_PAD_LEFT);
 
-            foreach ($group['rows'] as $row) {
-                $row->firstVoucher = $newVoucher;
+                foreach ($group['rows'] as $row) {
+                    $row->firstVoucher = $newVoucher;
+                }
             }
         }
 
@@ -395,7 +455,9 @@ class JournalTab extends Component
      */
     private function mergeVirtualSummary($rows, Carbon $start, Carbon $end)
     {
-        $virtuals = BumdesCashBalance::getBumdesVirtualEntries($start, $end, $this->mode);
+        $virtuals = $this->filterSearchCollection(
+            BumdesCashBalance::getBumdesVirtualEntries($start, $end, $this->mode)
+        );
         if ($virtuals->isEmpty()) {
             return $rows->values();
         }
@@ -466,13 +528,13 @@ class JournalTab extends Component
         $query = JournalEntry::whereDate('transaction_date', '>=', $start->format('Y-m-d'))
             ->whereDate('transaction_date', '<=', $end->format('Y-m-d'));
         $this->applyRoleScope($query);
+        $this->applySearch($query);
 
         $total = (float) $query->sum('debit');
         if ($this->isBumdesScope()) {
-            if (in_array($this->mode, ['monthly', 'semester', 'yearly'], true)) {
-                $total += BumdesCashBalance::getOpeningBalance($start);
-            }
-            $total += BumdesCashBalance::getTotalNetUnitIncome($start, $end);
+            $total += (float) $this->filterSearchCollection(
+                BumdesCashBalance::getBumdesVirtualEntries($start, $end, $this->mode)
+            )->sum('debit');
         }
 
         return $total;
@@ -485,13 +547,13 @@ class JournalTab extends Component
         $query = JournalEntry::whereDate('transaction_date', '>=', $start->format('Y-m-d'))
             ->whereDate('transaction_date', '<=', $end->format('Y-m-d'));
         $this->applyRoleScope($query);
+        $this->applySearch($query);
 
         $total = (float) $query->sum('credit');
         if ($this->isBumdesScope()) {
-            if (in_array($this->mode, ['monthly', 'semester', 'yearly'], true)) {
-                $total += BumdesCashBalance::getOpeningBalance($start);
-            }
-            $total += BumdesCashBalance::getTotalNetUnitIncome($start, $end);
+            $total += (float) $this->filterSearchCollection(
+                BumdesCashBalance::getBumdesVirtualEntries($start, $end, $this->mode)
+            )->sum('credit');
         }
 
         return $total;

@@ -51,6 +51,9 @@ class HistoryRecap extends Component
     /** Journal tab view: 'summary' (aggregated) or 'detailed' (per voucher). */
     public string $viewMode = 'detailed';
 
+    /** Journal tab free-text filter. */
+    public string $search = '';
+
     public function updatedSortOption(): void
     {
         [$field, $direction] = array_pad(explode('-', $this->sortOption, 2), 2, 'asc');
