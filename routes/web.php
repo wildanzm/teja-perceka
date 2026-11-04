@@ -16,6 +16,7 @@ use App\Livewire\SuperAdmin\Dashboard as SuperAdminDashboard;
 use App\Livewire\SuperAdmin\UserManager as SuperAdminUserManager;
 use App\Livewire\Supervisor\Dashboard as SupervisorDashboard;
 use App\Livewire\Transactions\HistoryRecap;
+use App\Livewire\Transactions\RecordIncome;
 use App\Livewire\Treasurer\Dashboard as TreasurerDashboard;
 use App\Livewire\UnitHead\Dashboard as UnitHeadDashboard;
 use App\Livewire\UnitHead\ManageRevenue;
@@ -121,6 +122,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->get('pengeluaran/catat', RecordExpense::class)
         ->name('expenses.record');
 
+    // ===== Transactions (BUMDes income: direktur_bumdes, sekretaris, bendahara) =====
+    Route::middleware(['role:direktur_bumdes|sekretaris|bendahara'])
+        ->get('transaksi/input', RecordIncome::class)
+        ->name('bumdes.record-transaction');
     // ===== Centralized financial reports =====
     Route::middleware(['role:kepala_unit|sekretaris|bendahara|direktur_bumdes|kepala_desa|pengawas'])->group(function () {
         Route::get('laporan/laba-rugi', ProfitLoss::class)->name('reports.profit-loss');

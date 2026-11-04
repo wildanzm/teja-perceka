@@ -178,7 +178,15 @@ class RevenueTab extends Component
         [$start, $end] = $range;
 
         if ($this->isBumdesScope()) {
-            $revenue = BumdesCashBalance::getTotalNetUnitIncome($start, $end);
+            $directRevenue = (float) JournalEntry::where('voucher_number', 'like', 'DBM%')
+                ->whereNull('business_unit_id')
+                ->whereNull('daily_transaction_id')
+                ->whereDate('transaction_date', '>=', $start->format('Y-m-d'))
+                ->whereDate('transaction_date', '<=', $end->format('Y-m-d'))
+                ->whereHas('account', fn ($q) => $q->whereIn('type', ['pendapatan', 'pendapatan_lain']))
+                ->sum(DB::raw('credit - debit'));
+
+            $revenue = BumdesCashBalance::getTotalNetUnitIncome($start, $end) + $directRevenue;
 
             $expenses = (float) JournalEntry::where('voucher_number', 'like', 'KBM%')
                 ->whereDate('transaction_date', '>=', $start->format('Y-m-d'))

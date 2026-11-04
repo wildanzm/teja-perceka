@@ -415,7 +415,7 @@ class JournalTab extends Component
             foreach ($groups as $group) {
                 $first = $group['rows']->first();
                 $origVoucher = (string) ($first->firstVoucher ?? '');
-                $prefix = VoucherNumber::prefixOf($origVoucher);
+                $prefix = str_starts_with($origVoucher, 'DBM') ? 'DBM' : VoucherNumber::prefixOf($origVoucher);
                 if (! $prefix) {
                     continue;
                 }
@@ -575,6 +575,20 @@ class JournalTab extends Component
         return Auth::user()->hasAnyRole(['sekretaris', 'bendahara', 'direktur_bumdes', 'kepala_unit']);
     }
 
+    public function canDeleteJournal($journal): bool
+    {
+        if (! $this->canDelete || ! $journal || ! $journal->id) {
+            return false;
+        }
+
+        // BUMDes income transactions have their CRUD restricted to Input Transaksi menu
+        if ($journal->business_unit_id === null && str_starts_with((string) $journal->voucher_number, 'DBM')) {
+            return false;
+        }
+
+        return true;
+    }
+
     // ── Delete ────────────────────────────────────────────────────────────────
 
     public function confirmDelete(int $id): void
@@ -591,6 +605,12 @@ class JournalTab extends Component
 
         $journal = JournalEntry::find($this->deleteId);
         if (! $journal) {
+            return;
+        }
+
+        if ($journal->business_unit_id === null && str_starts_with((string) $journal->voucher_number, 'DBM')) {
+            $this->dispatch('swal-alert', icon: 'warning', title: 'Perhatian', text: 'Transaksi pendapatan BUMDes hanya dapat dikelola melalui menu Input Transaksi.');
+
             return;
         }
 

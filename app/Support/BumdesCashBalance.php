@@ -9,6 +9,7 @@ use App\Models\OpeningBalance;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class BumdesCashBalance
 {
@@ -67,8 +68,11 @@ class BumdesCashBalance
         // Manual opening balances (cash carried in from before the app
         // started) apply from their month onward.
         $start = Carbon::parse($startDate);
-        $manualOpening = (float) OpeningBalance::where('period', '<=', $start->format('Y-m'))
-            ->sum('amount');
+        $manualOpening = 0.0;
+        if (Schema::hasTable('opening_balances')) {
+            $manualOpening = (float) OpeningBalance::where('period', '<=', $start->format('Y-m'))
+                ->sum('amount');
+        }
 
         return max(0.0, $openingBalance + $manualOpening);
     }
@@ -304,11 +308,56 @@ class BumdesCashBalance
         string $sortDirection = 'asc'
     ): Collection {
         $virtualEntries = self::getBumdesVirtualEntries($startDate, $endDate, $mode);
-        if ($virtualEntries->isEmpty()) {
-            return $transactions;
+        $allTransactions = $transactions->concat($virtualEntries);
+
+        // Sequence in-memory voucher numbers (DBM001, DBM002, ...) for all DBM entries chronologically
+        $dbmGroups = [];
+        foreach ($allTransactions as $entry) {
+            if (! str_starts_with((string) $entry->voucher_number, 'DBM')) {
+                continue;
+            }
+
+            $isOpening = str_starts_with((string) $entry->description, 'Saldo Kas');
+            $isUnitRevenue = $entry->business_unit_id !== null && str_starts_with((string) $entry->description, 'Pendapatan ');
+
+            if ($isOpening) {
+                $groupKey = 'opening|'.Carbon::parse($entry->transaction_date)->format('Y-m-d');
+                $priority = 0;
+            } elseif ($isUnitRevenue) {
+                $groupKey = 'unit_rev|'.$entry->business_unit_id;
+                $priority = 2;
+            } else {
+                $groupKey = 'dbm_tx|'.$entry->voucher_number;
+                $priority = 1;
+            }
+
+            $dateStr = Carbon::parse($entry->transaction_date)->format('Y-m-d');
+            $dbmGroups[$groupKey]['priority'] = $priority;
+            $dbmGroups[$groupKey]['date'] = $dateStr;
+            $dbmGroups[$groupKey]['id'] = $entry->id ?? 0;
+            $dbmGroups[$groupKey]['entries'][] = $entry;
         }
 
-        $allTransactions = $transactions->concat($virtualEntries);
+        if (! empty($dbmGroups)) {
+            uasort($dbmGroups, function ($a, $b) {
+                if ($a['date'] !== $b['date']) {
+                    return strcmp($a['date'], $b['date']);
+                }
+                if ($a['priority'] !== $b['priority']) {
+                    return $a['priority'] <=> $b['priority'];
+                }
+
+                return $a['id'] <=> $b['id'];
+            });
+
+            $seq = 1;
+            foreach ($dbmGroups as $group) {
+                $voucher = sprintf('DBM%03d', $seq++);
+                foreach ($group['entries'] as $entry) {
+                    $entry->voucher_number = $voucher;
+                }
+            }
+        }
         $isDescending = strtolower($sortDirection) === 'desc';
 
         return $allTransactions->sort(function ($first, $second) use ($sortField, $isDescending) {

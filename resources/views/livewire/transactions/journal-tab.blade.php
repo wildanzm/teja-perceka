@@ -163,7 +163,7 @@
                                         @if($loop->first)
                                             <td rowspan="{{ $group->count() }}" class="py-3 px-4 align-middle text-center border-l border-zinc-100">
                                                 <div class="flex flex-row justify-center gap-1.5 items-center">
-                                                    @if($this->canDelete && $journal->id)
+                                                    @if($this->canDeleteJournal($journal))
                                                         <flux:button wire:click="confirmDelete({{ $journal->id }})"
                                                             variant="danger" size="xs" icon="trash" title="Hapus" />
                                                     @endif
@@ -196,7 +196,7 @@
                             @endif
                         </div>
                         <div class="flex gap-1.5 shrink-0 mt-0.5">
-                            @if($this->canDelete && $firstJournal->id)
+                            @if($this->canDeleteJournal($firstJournal))
                                 <flux:button wire:click="confirmDelete({{ $firstJournal->id }})"
                                     variant="danger" size="xs" icon="trash" />
                             @endif
