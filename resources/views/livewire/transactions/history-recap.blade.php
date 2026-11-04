@@ -171,28 +171,28 @@
     <div class="mt-2 min-w-0">
         @if($tab === 'revenue')
             <livewire:transactions.revenue-tab 
-                :unit-id="$unit_id"
+                :unitId="$unit_id"
                 :mode="$mode"
                 :transactionDate="$transactionDate"
                 :week="$week"
                 :month="$month"
                 :semester="$semester"
-                :semester-tahun="$semesterYear"
+                :semesterYear="$semesterYear"
                 :year="$year" 
                 wire:key="tab-pendapatan-{{ $unit_id }}-{{ $mode }}-{{ $transactionDate }}-{{ $week }}-{{ $month }}-{{ $semester }}-{{ $semesterYear }}-{{ $year }}"
             />
         @elseif($tab === 'journal')
             <livewire:transactions.journal-tab
-                :unit-id="$unit_id"
+                :unitId="$unit_id"
                 :mode="$mode"
                 :transactionDate="$transactionDate"
                 :week="$week"
                 :month="$month"
                 :semester="$semester"
-                :semester-tahun="$semesterYear"
+                :semesterYear="$semesterYear"
                 :year="$year"
-                :sort-field="$sortField"
-                :sort-direction="$sortDirection"
+                :sortField="$sortField"
+                :sortDirection="$sortDirection"
                 :viewMode="$viewMode"
                 :search="$search"
                 wire:key="tab-jurnal-{{ $unit_id }}-{{ $mode }}-{{ $transactionDate }}-{{ $week }}-{{ $month }}-{{ $semester }}-{{ $semesterYear }}-{{ $year }}-{{ $sortField }}-{{ $sortDirection }}-{{ $viewMode }}"
