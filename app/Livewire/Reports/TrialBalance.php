@@ -168,27 +168,29 @@ class TrialBalance extends Component
             $this->applyReportScope($monthlyQuery);
             $balancePerAccount = $this->sumDebitCreditPerAccount($monthlyQuery);
 
-            // BUMDes scope: current-month unit income (all units) via virtual entries,
-            // because unit journals are filtered out of the base query. No prior balances injected.
+            // BUMDes scope: inject opening balance (Kas & Laba/Rugi Bulan Lalu)
+            // and current-month unit income (all units) via virtual entries.
             if ($this->isBumdesScope()) {
+                $openingBalance = BumdesCashBalance::getOpeningBalance($startDate);
                 $netUnitIncome = BumdesCashBalance::getTotalNetUnitIncome($startDate, $endDate);
+                $totalIncome = $openingBalance + $netUnitIncome;
 
-                // Cash account: current-month net unit income (debit)
+                // Cash account: opening balance + net unit income (debit)
                 $cashAccount = Account::where('code', '1-1100')->first();
-                if ($cashAccount && $netUnitIncome > 0) {
+                if ($cashAccount && $totalIncome > 0) {
                     $row = $balancePerAccount->get($cashAccount->id);
                     if ($row) {
-                        $row->totalDebit += $netUnitIncome;
+                        $row->totalDebit += $totalIncome;
                     } else {
                         $balancePerAccount->put($cashAccount->id, (object) [
                             'account_id' => $cashAccount->id,
-                            'totalDebit' => $netUnitIncome,
+                            'totalDebit' => $totalIncome,
                             'totalCredit' => 0,
                         ]);
                     }
                 }
 
-                $totalRevenue += $netUnitIncome;
+                $totalRevenue += $totalIncome;
             }
 
             foreach ($accounts as $account) {

@@ -186,7 +186,8 @@ class RevenueTab extends Component
                 ->whereHas('account', fn ($q) => $q->whereIn('type', ['pendapatan', 'pendapatan_lain']))
                 ->sum(DB::raw('credit - debit'));
 
-            $revenue = BumdesCashBalance::getTotalNetUnitIncome($start, $end) + $directRevenue;
+            $opening = BumdesCashBalance::getOpeningBalance($start);
+            $revenue = $opening + BumdesCashBalance::getTotalNetUnitIncome($start, $end) + $directRevenue;
 
             $expenses = (float) JournalEntry::where('voucher_number', 'like', 'KBM%')
                 ->whereDate('transaction_date', '>=', $start->format('Y-m-d'))

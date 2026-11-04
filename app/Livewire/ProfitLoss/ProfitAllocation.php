@@ -159,7 +159,7 @@ class ProfitAllocation extends Component
     {
         [$start, $end] = $this->periodRange();
 
-        $revenue = $this->sumAccountBalance('pendapatan', 'credit', [$start, $end]) + BumdesCashBalance::getTotalNetUnitIncome($start, $end);
+        $revenue = $this->sumAccountBalance('pendapatan', 'credit', [$start, $end]) + BumdesCashBalance::getOpeningBalance($start) + BumdesCashBalance::getTotalNetUnitIncome($start, $end);
         $cogs = $this->sumAccountBalance('hpp', 'debit', [$start, $end]);
         $expenses = $this->sumAccountBalance('beban', 'debit', [$start, $end]);
         $otherRevenue = $this->sumAccountBalance('pendapatan_lain', 'credit', [$start, $end]);

@@ -177,7 +177,8 @@ class ProfitLoss extends Component
             [$start, $end] = $this->periodRange();
             $revenueAccount = Account::where('code', '4-2000')->first();
             if ($revenueAccount && in_array($revenueAccount->id, $accountIds->toArray())) {
-                $virtualRevenue = BumdesCashBalance::getTotalNetUnitIncome($start, $end);
+                $opening = BumdesCashBalance::getOpeningBalance($start);
+                $virtualRevenue = $opening + BumdesCashBalance::getTotalNetUnitIncome($start, $end);
                 $sums[$revenueAccount->id] = ($sums[$revenueAccount->id] ?? 0) + $virtualRevenue;
             }
         }
