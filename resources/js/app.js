@@ -75,7 +75,7 @@ document.addEventListener('livewire:navigated', () => formatRupiahScope(document
 
 function hookRupiahMorph(attempts = 100) {
     if (window.Livewire?.hook) {
-        window.Livewire.hook('morph.updated', ({ el }) => {
+        window.Livewire.hook('morphed', ({ el }) => {
             if (el instanceof HTMLElement) {
                 formatRupiahScope(el);
             }

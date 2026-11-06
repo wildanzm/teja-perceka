@@ -178,25 +178,19 @@
                                     {{ number_format($journal->debit, 0, ',', '.') }}</span>
                             </td>
                             <td class="py-3.5 px-4 whitespace-nowrap text-center">
-                                <div class="flex items-center justify-center gap-1">
+                                <div class="flex flex-row justify-center gap-1.5 items-center">
                                     <button wire:click="editHistory({{ $journal->id }})"
-                                        class="p-2 text-brand-600 hover:text-brand-800 rounded-lg transition-colors inline-flex items-center justify-center"
-                                        title="Edit">
-                                        <svg class="size-4" xmlns="http://www.w3.org/2000/svg" fill="none"
-                                            viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round"
-                                                d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
+                                        type="button"
+                                        style="background-color:#fbbf24;color:#1c1917;"
+                                        title="Edit"
+                                        class="inline-flex items-center justify-center size-7 rounded-lg transition-colors hover:opacity-90">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-3.5">
+                                            <path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L6.75 6.774a2.75 2.75 0 0 0-.596.892l-.848 2.047a.75.75 0 0 0 .98.98l2.047-.848a2.75 2.75 0 0 0 .892-.596l4.261-4.263a1.75 1.75 0 0 0 0-2.474Z" />
+                                            <path d="M4.75 3.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V9A.75.75 0 0 1 13 9v2.25A2.75 2.75 0 0 1 10.25 14h-6.5A2.75 2.75 0 0 1 1 11.25v-6.5A2.75 2.75 0 0 1 3.75 2H6a.75.75 0 0 1 0 1.5H3.75Z" />
                                         </svg>
                                     </button>
-                                    <button wire:click="confirmDelete({{ $journal->id }})"
-                                        class="p-2 text-red-500 hover:text-red-700 rounded-lg transition-colors inline-flex items-center justify-center"
-                                        title="Hapus">
-                                        <svg class="size-4" xmlns="http://www.w3.org/2000/svg" fill="none"
-                                            viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round"
-                                                d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                                        </svg>
-                                    </button>
+                                    <flux:button wire:click="confirmDelete({{ $journal->id }})"
+                                        variant="danger" size="xs" icon="trash" title="Hapus" />
                                 </div>
                             </td>
                         </tr>
@@ -244,25 +238,19 @@
                     </div>
                     <div class="flex items-center justify-between pt-2">
                         <span class="text-sm font-bold text-red-600">Rp {{ number_format($journal->debit, 0, ',', '.') }}</span>
-                        <div class="flex items-center gap-1">
+                        <div class="flex items-center gap-1.5">
                             <button wire:click="editHistory({{ $journal->id }})"
-                                class="p-2 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
-                                title="Edit">
-                                <svg class="size-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                    stroke-width="2" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                        d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
+                                type="button"
+                                style="background-color:#fbbf24;color:#1c1917;"
+                                title="Edit"
+                                class="inline-flex items-center justify-center size-7 rounded-lg transition-colors hover:opacity-90">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-3.5">
+                                    <path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L6.75 6.774a2.75 2.75 0 0 0-.596.892l-.848 2.047a.75.75 0 0 0 .98.98l2.047-.848a2.75 2.75 0 0 0 .892-.596l4.261-4.263a1.75 1.75 0 0 0 0-2.474Z" />
+                                    <path d="M4.75 3.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V9A.75.75 0 0 1 13 9v2.25A2.75 2.75 0 0 1 10.25 14h-6.5A2.75 2.75 0 0 1 1 11.25v-6.5A2.75 2.75 0 0 1 3.75 2H6a.75.75 0 0 1 0 1.5H3.75Z" />
                                 </svg>
                             </button>
-                            <button wire:click="confirmDelete({{ $journal->id }})"
-                                class="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                title="Hapus">
-                                <svg class="size-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                    stroke-width="2" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                        d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                                </svg>
-                            </button>
+                            <flux:button wire:click="confirmDelete({{ $journal->id }})"
+                                variant="danger" size="xs" icon="trash" title="Hapus" />
                         </div>
                     </div>
                 </div>
