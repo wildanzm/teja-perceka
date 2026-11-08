@@ -15,13 +15,20 @@ class ProfitAllocationRecord extends Model
     protected $fillable = [
         'description',
         'percentage',
+        'calc_type',
+        'amount',
         'allocation_group',
+        'flow_type',
+        'account_id',
         'effective_from',
+        'period_mode',
+        'period_key',
         'business_unit_id',
     ];
 
     protected $casts = [
         'percentage' => 'decimal:2',
+        'amount' => 'decimal:2',
         'effective_from' => 'date',
     ];
 
@@ -31,5 +38,13 @@ class ProfitAllocationRecord extends Model
     public function businessUnit(): BelongsTo
     {
         return $this->belongsTo(BusinessUnit::class, 'business_unit_id');
+    }
+
+    /**
+     * Target chart of account for automatic journal posting.
+     */
+    public function account(): BelongsTo
+    {
+        return $this->belongsTo(Account::class, 'account_id');
     }
 }

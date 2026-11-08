@@ -5,10 +5,10 @@ namespace App\Livewire\Transactions;
 use App\Models\Account;
 use App\Models\JournalEntry;
 use App\Support\Rupiah;
+use App\Support\VoucherNumber;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Exists;
 use Livewire\Attributes\Computed;
@@ -197,9 +197,12 @@ class RecordIncome extends Component
         try {
             $cashAccount = Account::where('code', '1-1100')->firstOrFail();
 
-            foreach ($validItems as $item) {
+            $date = Carbon::parse($this->transactionDate);
+            $voucherBatch = VoucherNumber::nextBatch('DBM', $date->format('Y-m-d'), count($validItems), null);
+
+            foreach ($validItems as $index => $item) {
                 $itemAmount = (float) $item['amount'];
-                $voucherIdentifier = 'DBM-'.(string) Str::ulid();
+                $voucherIdentifier = $voucherBatch[$index];
                 $description = $item['description'];
 
                 // 1. Debit to Cash (1-1100)
@@ -303,7 +306,11 @@ class RecordIncome extends Component
             return;
         }
 
-        DB::transaction(function () use ($journals, $validated) {
+        $prefix = VoucherNumber::prefixOf($journals->first()->voucher_number);
+        $oldMonth = substr((string) $journals->first()->transaction_date, 0, 7);
+        $newMonth = substr($validated['editDate'], 0, 7);
+
+        DB::transaction(function () use ($journals, $validated, $prefix, $oldMonth, $newMonth) {
             $cashAccount = Account::where('code', '1-1100')->firstOrFail();
 
             foreach ($journals as $j) {
@@ -315,6 +322,12 @@ class RecordIncome extends Component
                     'debit' => $isCash ? $validated['editAmount'] : 0,
                     'credit' => $isCash ? 0 : $validated['editAmount'],
                 ]);
+            }
+
+            // Cross-month move leaves a gap behind: close it on both sides.
+            if ($prefix !== null && $newMonth !== $oldMonth) {
+                VoucherNumber::renumberScope($prefix, $oldMonth, null);
+                VoucherNumber::renumberScope($prefix, $newMonth, null);
             }
         });
 
@@ -338,9 +351,16 @@ class RecordIncome extends Component
 
         $journals = $this->historyGroup($this->deletingJournalId);
         if ($journals->isNotEmpty()) {
-            DB::transaction(function () use ($journals) {
+            $prefix = VoucherNumber::prefixOf($journals->first()->voucher_number);
+            $month = substr((string) $journals->first()->transaction_date, 0, 7);
+
+            DB::transaction(function () use ($journals, $prefix, $month) {
                 foreach ($journals as $j) {
                     $j->delete();
+                }
+
+                if ($prefix !== null) {
+                    VoucherNumber::renumberScope($prefix, $month, null);
                 }
             });
         }
@@ -393,10 +413,6 @@ class RecordIncome extends Component
         };
 
         $rows = $query->orderBy('transaction_date', 'asc')->orderBy('id', 'asc')->get();
-
-        foreach ($rows as $index => $row) {
-            $row->in_memory_voucher = sprintf('DBM%03d', $index + 1);
-        }
 
         return $rows;
     }

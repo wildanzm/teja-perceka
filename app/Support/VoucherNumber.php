@@ -75,12 +75,36 @@ class VoucherNumber
             ->sortBy([['date', 'asc'], ['firstId', 'asc']])
             ->values();
 
+        $baseOffset = 0;
+        if ($prefix === 'DBM' && BumdesCashBalance::getOpeningBalance($monthStart) > 0) {
+            $baseOffset = 1;
+        }
+
+        // Compute every target number first, then apply. Writing inside the loop let a
+        // group whose old number already equalled its new number be skipped while a
+        // different group was simultaneously assigned that same number, producing two
+        // distinct vouchers sharing one number in the same month.
+        $assignments = [];
+        $taken = [];
+
         foreach ($pairs as $index => $pair) {
-            $new = $prefix.str_pad($index + 1, 3, '0', STR_PAD_LEFT);
-            if ($pair['old'] === $new) {
+            $new = $prefix.str_pad($index + 1 + $baseOffset, 3, '0', STR_PAD_LEFT);
+
+            if (isset($taken[$new])) {
+                // Should not happen with positional numbering, but a collision here would
+                // silently merge two vouchers, so make it impossible rather than hoped-for.
                 continue;
             }
-            JournalEntry::whereIn('id', $pair['ids'])->update(['voucher_number' => $new]);
+
+            $taken[$new] = true;
+
+            if ($pair['old'] !== $new) {
+                $assignments[$new] = $pair['ids'];
+            }
+        }
+
+        foreach ($assignments as $new => $ids) {
+            JournalEntry::whereIn('id', $ids)->update(['voucher_number' => $new]);
         }
     }
 
@@ -105,6 +129,8 @@ class VoucherNumber
 
             if ($businessUnitId !== null) {
                 $query->where('business_unit_id', $businessUnitId);
+            } else {
+                $query->whereNull('business_unit_id');
             }
 
             // One voucher = one voucher_number (possibly many debit/credit rows), ordered chronologically.

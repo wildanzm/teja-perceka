@@ -2,12 +2,12 @@
 
 namespace Database\Seeders;
 
-use App\Enums\TransactionType;
 use App\Enums\CategoryType;
-use App\Models\CategoryPriceHistory;
-use App\Models\TransactionCategory;
+use App\Enums\TransactionType;
 use App\Models\Account;
 use App\Models\BusinessUnit;
+use App\Models\CategoryPriceHistory;
+use App\Models\TransactionCategory;
 use Illuminate\Database\Seeder;
 
 class TransactionCategorySeeder extends Seeder

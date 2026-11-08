@@ -82,6 +82,11 @@ class TrialBalance extends Component
             });
         } elseif ($this->unit_id && is_numeric($this->unit_id)) {
             $query->where('business_unit_id', (int) $this->unit_id);
+        } else {
+            // Fail closed, matching GeneralLedger::reportData(): a kepala_unit whose unit
+            // is missing satisfies neither branch, and falling through would silently
+            // return every unit's rows.
+            abort(403, 'Unit scope tidak dapat ditentukan untuk laporan ini.');
         }
     }
 
@@ -211,9 +216,11 @@ class TrialBalance extends Component
                 $firstDigit = substr($account->code, 0, 1);
 
                 // Profit/loss from the filtered month's movements (nominal accounts are already monthly).
-                if ($firstDigit === '4' || $firstDigit === '7') {
+                // Classify by account type, not code prefix: 7-x holds both pendapatan_lain
+                // and beban_lain, and the prefix alone would treat expenses as revenue.
+                if (in_array($account->type, ['pendapatan', 'pendapatan_lain'], true)) {
                     $totalRevenue += $closingBalance; // Credit-normal balance, so closing is credit minus debit
-                } elseif ($firstDigit === '5' || $firstDigit === '6') {
+                } elseif (in_array($account->type, ['hpp', 'beban', 'beban_lain'], true)) {
                     $totalExpenses += $closingBalance; // Debit-normal balance, so closing is debit minus credit
                 }
 
@@ -283,6 +290,13 @@ class TrialBalance extends Component
      */
     public function buildReportPdf(): array
     {
+        // Re-pin the unit head exactly as render() does, so the export path does not
+        // depend on the caller (ReportPreviewController) having scoped correctly.
+        $user = Auth::user();
+        if ($user && $user->hasRole('kepala_unit')) {
+            $this->unit_id = $user->business_unit_id;
+        }
+
         $data = $this->reportData;
         $unit = $this->selectedUnit;
         $entityName = $unit ? strtoupper($unit->name) : 'BUMDESA TEJA PERCEKA';

@@ -4,14 +4,18 @@ namespace App\Livewire\ProfitLoss;
 
 use App\Models\Account;
 use App\Models\JournalEntry;
+use App\Models\ProfitAllocationClosing;
 use App\Models\ProfitAllocationRecord;
 use App\Support\BumdesCashBalance;
 use App\Support\PdfExport;
+use App\Support\Rupiah;
 use App\Support\SafeDates;
+use App\Support\VoucherNumber;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
@@ -22,7 +26,13 @@ use Livewire\Component;
 #[Title('Alokasi Laba')]
 class ProfitAllocation extends Component
 {
-    /** 'monthly' | 'semester' | 'yearly' */
+    /**
+     * Period identity. These stay client-writable because the period pickers bind to
+     * them, so they are NOT trusted as ledger keys: periodKey() canonicalises them
+     * through the same normalisation periodRange()/periodLabel() use, so a forged or
+     * malformed value can never create a closeable period that disagrees with the date
+     * range whose profit it consumes.
+     */
     public string $mode = 'monthly';
 
     public string $period = '';
@@ -40,11 +50,23 @@ class ProfitAllocation extends Component
 
     public string $formGroup = 'pengurang'; // 'pengurang' | 'ad_art'
 
+    public string $formCalcType = 'percentage'; // 'percentage' | 'nominal'
+
     public string $formPercentage = '';
+
+    public string $formAmount = '';
+
+    public string $formFlowType = 'outflow'; // 'outflow' | 'retained'
+
+    public ?int $formAccountId = null;
 
     public ?string $deleteDescription = null;
 
     public bool $showDeleteModal = false;
+
+    public bool $showClosingConfirmModal = false;
+
+    public bool $showRollbackConfirmModal = false;
 
     public function mount(): void
     {
@@ -77,10 +99,10 @@ class ProfitAllocation extends Component
 
     // ─── Helpers ─────────────────────────────────────────────────────────
 
-    private function periodRange(): array
+    public function periodRange(): array
     {
         if ($this->mode === 'yearly') {
-            $year = (int) ($this->period ?: Carbon::now()->format('Y'));
+            $year = SafeDates::year($this->period);
 
             return [
                 Carbon::create($year, 1, 1)->startOfDay(),
@@ -89,7 +111,7 @@ class ProfitAllocation extends Component
         }
 
         if ($this->mode === 'semester') {
-            $year = (int) ($this->semesterYear ?: Carbon::now()->format('Y'));
+            $year = SafeDates::year($this->semesterYear);
             if ($this->semester === '1') {
                 return [
                     Carbon::create($year, 1, 1)->startOfDay(),
@@ -111,19 +133,65 @@ class ProfitAllocation extends Component
         ];
     }
 
-    private function periodLabel(): string
+    public function periodLabel(): string
     {
         if ($this->mode === 'yearly') {
-            return 'Tahun '.($this->period ?: Carbon::now()->format('Y'));
+            return 'Tahun '.SafeDates::year($this->period);
         }
 
         if ($this->mode === 'semester') {
-            $year = $this->semesterYear ?: Carbon::now()->format('Y');
+            $semester = $this->semester === '1' ? '1' : '2';
 
-            return 'Semester '.$this->semester.' Tahun '.$year;
+            return 'Semester '.$semester.' Tahun '.SafeDates::year($this->semesterYear);
         }
 
         return SafeDates::month($this->period)->translatedFormat('F Y');
+    }
+
+    /**
+     * Canonical ledger key for the selected period.
+     *
+     * Deliberately derives from the SAME normalisation that periodRange() and
+     * periodLabel() use, rather than from the raw client-writable properties. If the
+     * key were taken verbatim, a value such as '2026-1' or '2026-010' would become its
+     * own closeable period while its reported date range silently collapsed to the
+     * current month — allowing one month's profit to be closed under a key that
+     * describes a different month.
+     */
+    #[Computed]
+    public function periodKey(): string
+    {
+        if ($this->mode === 'yearly') {
+            return 'yearly-'.SafeDates::year($this->period);
+        }
+
+        if ($this->mode === 'semester') {
+            $year = SafeDates::year($this->semesterYear);
+
+            // Bukan '1' => semester 2: samakan dengan periodRange().
+            $semester = $this->semester === '1' ? '1' : '2';
+
+            return 'semester-'.$semester.'-'.$year;
+        }
+
+        return SafeDates::month($this->period)->format('Y-m');
+    }
+
+    #[Computed]
+    public function currentClosing(): ?ProfitAllocationClosing
+    {
+        return ProfitAllocationClosing::where('period_mode', $this->mode)
+            ->where('period_key', $this->periodKey)
+            ->first();
+    }
+
+    #[Computed]
+    public function availableAccounts(): Collection
+    {
+        return Account::whereIn('type', ['beban', 'beban_lain'])
+            ->where('is_header', false)
+            ->orderBy('code')
+            ->get();
     }
 
     // ─── Calculation Data ────────────────────────────────────────────────
@@ -171,22 +239,56 @@ class ProfitAllocation extends Component
     }
 
     /**
-     * Get all active allocation rows (latest per description, global for all periods).
+     * Get active allocation rows for the currently selected period.
+     * Falls back to the latest period or legacy templates if none configured yet.
      */
     #[Computed]
     public function allocationRows(): Collection
     {
-        $latestRecords = ProfitAllocationRecord::orderBy('effective_from', 'desc')
+        // 1. Explicit records for this specific period
+        $periodRecords = ProfitAllocationRecord::with('account')
+            ->where('period_key', $this->periodKey)
             ->orderBy('id', 'desc')
             ->get()
             ->unique('description');
 
-        // Exclude rows with 0 percentage (marked as deleted)
-        return $latestRecords->filter(fn ($r) => (float) $r->percentage > 0)->values();
+        if ($periodRecords->isNotEmpty()) {
+            $records = $periodRecords;
+        } else {
+            // 2. Fallback to latest configured period or legacy records (period_key IS NULL)
+            $fallbackKey = ProfitAllocationRecord::whereNotNull('period_key')
+                ->where('period_key', '!=', $this->periodKey)
+                ->orderBy('id', 'desc')
+                ->value('period_key');
+
+            if ($fallbackKey) {
+                $records = ProfitAllocationRecord::with('account')
+                    ->where('period_key', $fallbackKey)
+                    ->orderBy('id', 'desc')
+                    ->get()
+                    ->unique('description');
+            } else {
+                $records = ProfitAllocationRecord::with('account')
+                    ->whereNull('period_key')
+                    ->orderBy('id', 'desc')
+                    ->get()
+                    ->unique('description');
+            }
+        }
+
+        // Exclude rows marked as deleted
+        return $records->filter(function ($r) {
+            $calcType = $r->calc_type ?? 'percentage';
+            if ($calcType === 'nominal') {
+                return (float) $r->amount > 0;
+            }
+
+            return (float) $r->percentage > 0;
+        })->values();
     }
 
     /**
-     * Deduction group rows — calculated from raw net profit.
+     * Deductions calculated from raw net profit.
      */
     #[Computed]
     public function deductionRows(): Collection
@@ -196,28 +298,33 @@ class ProfitAllocation extends Component
         return $this->allocationRows
             ->where('allocation_group', 'pengurang')
             ->map(function ($row) use ($netIncome) {
-                $amount = (float) $row->percentage / 100 * $netIncome;
+                $calcType = $row->calc_type ?? 'percentage';
+                $flowType = $row->flow_type ?? 'outflow';
+
+                $amount = $calcType === 'nominal'
+                    ? (float) $row->amount
+                    : ((float) $row->percentage / 100 * $netIncome);
 
                 return [
+                    'id' => $row->id,
                     'description' => $row->description,
+                    'calc_type' => $calcType,
+                    'flow_type' => $flowType,
                     'percentage' => (float) $row->percentage,
-                    'amount' => $amount,
+                    'amount_setting' => (float) $row->amount,
+                    'account_id' => $row->account_id,
+                    'account' => $row->account,
+                    'amount' => max(0, $amount),
                 ];
             })->values();
     }
 
-    /**
-     * Total amount of all deduction rows.
-     */
     #[Computed]
     public function totalDeductions(): float
     {
         return $this->deductionRows->sum('amount');
     }
 
-    /**
-     * Names of all deduction rows joined for display, e.g. "A", "A dan B", "A, B, dan C".
-     */
     #[Computed]
     public function deductionLabel(): string
     {
@@ -239,9 +346,6 @@ class ProfitAllocation extends Component
         return implode(', ', array_slice($names, 0, -1)).', dan '.end($names);
     }
 
-    /**
-     * Net profit after subtracting all deductions.
-     */
     #[Computed]
     public function netIncomeAfterDeductions(): float
     {
@@ -249,7 +353,7 @@ class ProfitAllocation extends Component
     }
 
     /**
-     * AD/ART group rows — calculated from net profit after deductions.
+     * AD/ART group rows calculated from net profit after deductions.
      */
     #[Computed]
     public function adArtRows(): Collection
@@ -259,28 +363,36 @@ class ProfitAllocation extends Component
         return $this->allocationRows
             ->where('allocation_group', 'ad_art')
             ->map(function ($row) use ($base) {
-                $amount = (float) $row->percentage / 100 * $base;
+                $calcType = $row->calc_type ?? 'percentage';
+                $flowType = $row->flow_type ?? 'retained';
+
+                $amount = $calcType === 'nominal'
+                    ? (float) $row->amount
+                    : ((float) $row->percentage / 100 * $base);
 
                 return [
+                    'id' => $row->id,
                     'description' => $row->description,
+                    'calc_type' => $calcType,
+                    'flow_type' => $flowType,
                     'percentage' => (float) $row->percentage,
-                    'amount' => $amount,
+                    'amount_setting' => (float) $row->amount,
+                    'account_id' => $row->account_id,
+                    'account' => $row->account,
+                    'amount' => max(0, $amount),
                 ];
             })->values();
     }
 
-    /**
-     * Total percentage of all AD/ART rows.
-     */
     #[Computed]
     public function totalAdArtPercent(): float
     {
-        return $this->allocationRows->where('allocation_group', 'ad_art')->sum('percentage');
+        return $this->allocationRows
+            ->where('allocation_group', 'ad_art')
+            ->where('calc_type', 'percentage')
+            ->sum('percentage');
     }
 
-    /**
-     * Total amount of all AD/ART rows.
-     */
     #[Computed]
     public function totalAdArtAmount(): float
     {
@@ -288,22 +400,112 @@ class ProfitAllocation extends Component
     }
 
     #[Computed]
+    public function totalOutflow(): float
+    {
+        $deductions = $this->deductionRows->where('flow_type', 'outflow')->sum('amount');
+        $adArt = $this->adArtRows->where('flow_type', 'outflow')->sum('amount');
+
+        return $deductions + $adArt;
+    }
+
+    #[Computed]
+    public function totalRetained(): float
+    {
+        $deductions = $this->deductionRows->where('flow_type', 'retained')->sum('amount');
+        $adArt = $this->adArtRows->where('flow_type', 'retained')->sum('amount');
+
+        return $deductions + $adArt;
+    }
+
+    #[Computed]
+    public function totalAllocated(): float
+    {
+        return $this->totalOutflow + $this->totalRetained;
+    }
+
+    #[Computed]
+    public function unallocatedProfit(): float
+    {
+        return $this->netIncome - $this->totalAllocated;
+    }
+
+    #[Computed]
     public function canEdit(): bool
     {
-        // Only the director, secretary, and treasurer can edit
         return Auth::user()->hasAnyRole(['direktur_bumdes', 'sekretaris', 'bendahara']);
     }
 
     /**
-     * Kepala desa dan pengawas hanya melihat angka: tanpa blok tanda tangan.
+     * Allocation rows are frozen once the journals for the period are applied;
+     * they must be rolled back before any row can be created, edited, or deleted.
      */
+    #[Computed]
+    public function isLocked(): bool
+    {
+        return $this->currentClosing !== null;
+    }
+
     #[Computed]
     public function showSignature(): bool
     {
         return ! Auth::user()->hasAnyRole(['kepala_desa', 'pengawas']);
     }
 
-    // ─── Actions ─────────────────────────────────────────────────────────
+    // ─── Modal Actions ───────────────────────────────────────────────────
+
+    /**
+     * Ensure this specific period has its own distinct set of records
+     * so changes in this period do not alter other periods.
+     *
+     * Only copies from a template when this period genuinely has no rows of its own,
+     * and the copy runs inside a transaction so a failing caller insert cannot leave
+     * an inherited snapshot committed on its own. The source row's business_unit_id is
+     * preserved instead of being flattened to null, so a row never silently detaches
+     * from the unit that owns it.
+     */
+    private function ensurePeriodRowsExist(): void
+    {
+        if (ProfitAllocationRecord::where('period_key', $this->periodKey)->exists()) {
+            return;
+        }
+
+        $visibleRows = $this->allocationRows;
+
+        if ($visibleRows->isEmpty()) {
+            return;
+        }
+
+        $today = Carbon::now()->format('Y-m-d');
+
+        DB::transaction(function () use ($visibleRows, $today) {
+            foreach ($visibleRows as $row) {
+                ProfitAllocationRecord::create([
+                    'description' => $row->description,
+                    'percentage' => (float) $row->percentage,
+                    'calc_type' => $row->calc_type ?? 'percentage',
+                    'amount' => (float) $row->amount,
+                    'allocation_group' => $row->allocation_group,
+                    'flow_type' => $row->flow_type ?? 'outflow',
+                    'account_id' => $row->account_id,
+                    'effective_from' => $today,
+                    'period_mode' => $this->mode,
+                    'period_key' => $this->periodKey,
+                    'business_unit_id' => $row->business_unit_id,
+                ]);
+            }
+        });
+    }
+
+    private function guardNotLocked(): bool
+    {
+        if ($this->isLocked) {
+            $this->dispatch('swal-alert', icon: 'warning', title: 'Alokasi Terkunci', text: 'Jurnal alokasi periode ini sudah ditetapkan. Batalkan jurnal terlebih dahulu untuk mengubah pos alokasi.');
+
+            return false;
+        }
+
+        return true;
+    }
 
     public function openCreate(): void
     {
@@ -311,8 +513,17 @@ class ProfitAllocation extends Component
             abort(403);
         }
 
-        $this->reset(['formDescription', 'formGroup', 'formPercentage', 'editingDescription']);
+        if (! $this->guardNotLocked()) {
+            return;
+        }
+
+        $this->reset([
+            'formDescription', 'formGroup', 'formCalcType', 'formPercentage',
+            'formAmount', 'formFlowType', 'formAccountId', 'editingDescription',
+        ]);
         $this->formGroup = 'pengurang';
+        $this->formCalcType = 'percentage';
+        $this->formFlowType = 'outflow';
         $this->showModal = true;
         $this->resetErrorBag();
     }
@@ -323,6 +534,10 @@ class ProfitAllocation extends Component
             abort(403);
         }
 
+        if (! $this->guardNotLocked()) {
+            return;
+        }
+
         $row = $this->allocationRows->firstWhere('description', $description);
         if (! $row) {
             return;
@@ -331,7 +546,11 @@ class ProfitAllocation extends Component
         $this->editingDescription = $row->description;
         $this->formDescription = $row->description;
         $this->formGroup = $row->allocation_group;
+        $this->formCalcType = $row->calc_type ?? 'percentage';
         $this->formPercentage = (string) $row->percentage;
+        $this->formAmount = (float) $row->amount > 0 ? Rupiah::format($row->amount) : '';
+        $this->formFlowType = $row->flow_type ?? 'outflow';
+        $this->formAccountId = $row->account_id ? (int) $row->account_id : null;
         $this->showModal = true;
         $this->resetErrorBag();
     }
@@ -339,8 +558,13 @@ class ProfitAllocation extends Component
     public function closeModal(): void
     {
         $this->showModal = false;
-        $this->reset(['formDescription', 'formGroup', 'formPercentage', 'editingDescription']);
+        $this->reset([
+            'formDescription', 'formGroup', 'formCalcType', 'formPercentage',
+            'formAmount', 'formFlowType', 'formAccountId', 'editingDescription',
+        ]);
         $this->formGroup = 'pengurang';
+        $this->formCalcType = 'percentage';
+        $this->formFlowType = 'outflow';
         $this->resetErrorBag();
     }
 
@@ -350,49 +574,112 @@ class ProfitAllocation extends Component
             abort(403);
         }
 
+        if (! $this->guardNotLocked()) {
+            return;
+        }
+
+        $originalAmount = $this->formAmount;
+        if ($this->formCalcType === 'nominal') {
+            $parsedAmount = Rupiah::parse($this->formAmount);
+            $this->formAmount = $parsedAmount > 0 ? (string) $parsedAmount : '';
+        }
+
         try {
             $this->validate([
                 'formDescription' => 'required|string|max:100',
                 'formGroup' => 'required|in:pengurang,ad_art',
-                'formPercentage' => 'required|numeric|min:0.01|max:100',
+                'formCalcType' => 'required|in:percentage,nominal',
+                'formPercentage' => 'exclude_unless:formCalcType,percentage|required|numeric|min:0.01|max:100',
+                'formAmount' => 'exclude_unless:formCalcType,nominal|required|numeric|min:1',
+                'formFlowType' => 'required|in:outflow,retained',
+                'formAccountId' => 'nullable|exists:accounts,id',
+            ], [
+                'formPercentage.max' => 'Persentase maksimal 100%.',
+                'formPercentage.min' => 'Persentase minimal 0.01%.',
+                'formAmount.min' => 'Nominal harus diisi minimal Rp 1.',
+            ], [
+                'formDescription' => 'Keterangan pos alokasi',
+                'formPercentage' => 'Persentase',
+                'formAmount' => 'Nominal',
             ]);
         } catch (ValidationException $e) {
+            $this->formAmount = $originalAmount;
             $this->dispatch('swal-alert', icon: 'error', title: 'Gagal menyimpan', text: (string) $e->validator->errors()->first());
 
             throw $e;
         }
 
+        // Isolate records for this period, and write both the inherited snapshot and the
+        // operator's own row in one transaction so a failing insert cannot leave the
+        // inherited rows committed on their own.
         $today = Carbon::now()->format('Y-m-d');
-
-        // Rename: retire old description globally so it disappears for all periods
-        if ($this->editingDescription !== null && $this->formDescription !== $this->editingDescription) {
-            ProfitAllocationRecord::create([
-                'description' => $this->editingDescription,
-                'percentage' => 0,
-                'allocation_group' => 'pengurang',
-                'effective_from' => $today,
-                'business_unit_id' => null,
-            ]);
-        }
-
-        ProfitAllocationRecord::create([
-            'description' => $this->formDescription,
-            'percentage' => (float) $this->formPercentage,
-            'allocation_group' => $this->formGroup,
-            'effective_from' => $today,
-            'business_unit_id' => null, // Global level
-        ]);
-
+        $isRename = $this->editingDescription !== null && $this->formDescription !== $this->editingDescription;
+        $editingDescription = $this->editingDescription;
         $isEdit = $this->editingDescription !== null;
 
-        $this->reset(['formDescription', 'formGroup', 'formPercentage', 'showModal', 'editingDescription']);
-        $this->formGroup = 'pengurang'; // Reset to default
-        $this->resetErrorBag();
-        $this->dispatch('swal-alert', icon: 'success', title: 'Berhasil', text: $isEdit ? 'Baris alokasi berhasil diperbarui.' : 'Baris alokasi berhasil ditambahkan.');
+        DB::transaction(function () use ($today, $isRename, $editingDescription) {
+            $this->ensurePeriodRowsExist();
+
+            // Rename: retire old description within this period
+            if ($isRename) {
+                ProfitAllocationRecord::create([
+                    'description' => $editingDescription,
+                    'percentage' => 0,
+                    'calc_type' => 'percentage',
+                    'amount' => 0,
+                    'allocation_group' => 'pengurang',
+                    'flow_type' => 'outflow',
+                    'account_id' => null,
+                    'effective_from' => $today,
+                    'period_mode' => $this->mode,
+                    'period_key' => $this->periodKey,
+                    'business_unit_id' => null,
+                ]);
+            }
+
+            ProfitAllocationRecord::create([
+                'description' => $this->formDescription,
+                'percentage' => $this->formCalcType === 'percentage' ? (float) $this->formPercentage : 0,
+                'calc_type' => $this->formCalcType,
+                'amount' => $this->formCalcType === 'nominal' ? (float) $this->formAmount : 0,
+                'allocation_group' => $this->formGroup,
+                'flow_type' => $this->formFlowType,
+                'account_id' => ($this->formFlowType === 'outflow' && $this->formAccountId) ? (int) $this->formAccountId : null,
+                'effective_from' => $today,
+                'period_mode' => $this->mode,
+                'period_key' => $this->periodKey,
+                'business_unit_id' => null,
+            ]);
+        });
+
+        $this->closeModal();
+        $this->dispatch('swal-alert', icon: 'success', title: 'Berhasil', text: $isEdit ? 'Baris alokasi berhasil diperbarui untuk periode ini.' : 'Baris alokasi berhasil ditambahkan untuk periode ini.');
     }
 
     public function confirmDelete(string $description): void
     {
+        if (! $this->canEdit) {
+            abort(403);
+        }
+
+        if (! $this->guardNotLocked()) {
+            return;
+        }
+
+        // Only allow deleting a position that actually exists in the rendered rows for
+        // this period. Without this, an arbitrary client string would still materialise
+        // the period's inherited snapshot and then write a tombstone for a row that was
+        // never shown.
+        $exists = $this->allocationRows->contains(
+            fn ($row) => $row->description === $description
+        );
+
+        if (! $exists) {
+            $this->dispatch('swal-alert', icon: 'error', title: 'Gagal', text: 'Pos alokasi tidak ditemukan pada periode ini.');
+
+            return;
+        }
+
         $this->deleteDescription = $description;
         $this->showDeleteModal = true;
     }
@@ -403,21 +690,195 @@ class ProfitAllocation extends Component
             abort(403);
         }
 
-        $today = Carbon::now()->format('Y-m-d');
+        if (! $this->guardNotLocked()) {
+            return;
+        }
 
-        // Set percentage = 0 to mark as deleted globally (immutable audit history)
-        ProfitAllocationRecord::create([
-            'description' => $this->deleteDescription,
-            'percentage' => 0,
-            'allocation_group' => 'pengurang', // Category is irrelevant on deletion
-            'effective_from' => $today,
-            'business_unit_id' => null,
-        ]);
+        $description = $this->deleteDescription;
+        $isAdArt = $this->allocationRows
+            ->firstWhere('description', $description)?->allocation_group === 'ad_art';
 
-        $this->dispatch('swal-alert', icon: 'success', title: 'Berhasil', text: 'Baris alokasi berhasil dihapus.');
+        DB::transaction(function () use ($description, $isAdArt) {
+            $this->ensurePeriodRowsExist();
+
+            $today = Carbon::now()->format('Y-m-d');
+
+            // Mark as deleted for this specific period. Keep the row's own group and
+            // flow type so a tombstone for an ad_art/retained position does not
+            // masquerade as a pengurang/outflow one.
+            ProfitAllocationRecord::create([
+                'description' => $description,
+                'percentage' => 0,
+                'calc_type' => 'percentage',
+                'amount' => 0,
+                'allocation_group' => $isAdArt ? 'ad_art' : 'pengurang',
+                'flow_type' => 'outflow',
+                'account_id' => null,
+                'effective_from' => $today,
+                'period_mode' => $this->mode,
+                'period_key' => $this->periodKey,
+                'business_unit_id' => null,
+            ]);
+        });
+
+        $this->dispatch('swal-alert', icon: 'success', title: 'Berhasil', text: 'Baris alokasi berhasil dihapus dari periode ini.');
 
         $this->showDeleteModal = false;
         $this->deleteDescription = null;
+    }
+
+    // ─── Automatic Journal Posting Actions ───────────────────────────────
+
+    public function applyAllocation(): void
+    {
+        if (! $this->canEdit) {
+            abort(403);
+        }
+
+        if ($this->currentClosing) {
+            $this->dispatch('swal-alert', icon: 'warning', title: 'Sudah Diterapkan', text: 'Alokasi laba untuk periode ini sudah pernah diterapkan ke jurnal.');
+
+            return;
+        }
+
+        if ($this->netIncome <= 0) {
+            $this->dispatch('swal-alert', icon: 'error', title: 'Laba Tidak Memenuhi', text: 'Laba bersih periode ini nihil atau minus, tidak dapat dilakukan alokasi.');
+
+            return;
+        }
+
+        $allRows = $this->deductionRows->concat($this->adArtRows)->filter(fn ($r) => (float) $r['amount'] > 0)->values();
+
+        if ($allRows->isEmpty()) {
+            $this->dispatch('swal-alert', icon: 'warning', title: 'Alokasi Kosong', text: 'Tidak ada pos alokasi laba dengan nilai lebih dari 0.');
+
+            return;
+        }
+
+        if ($this->totalAllocated > $this->netIncome) {
+            $this->dispatch('swal-alert', icon: 'error', title: 'Alokasi Melebihi Laba', text: 'Total nilai alokasi melebihi total laba bersih yang tersedia.');
+
+            return;
+        }
+
+        [$start, $end] = $this->periodRange();
+        $closingDate = $end->format('Y-m-d');
+
+        $cashAccount = Account::where('code', '1-1100')->first()
+            ?? Account::where('type', 'aktiva')->where('is_header', false)->first();
+
+        // Hanya alokasi penyaluran laba (outflow / kas keluar) yang dicatat ke jurnal umum & buku besar.
+        // Pos cadangan modal (retained) tidak dicatat ke jurnal / tidak mengkredit kas.
+        $outflowRows = $allRows->where('flow_type', 'outflow')->filter(fn ($r) => ! empty($r['account_id']))->values();
+
+        if ($outflowRows->isEmpty()) {
+            $this->dispatch('swal-alert', icon: 'warning', title: 'Tidak Ada Akun', text: 'Tidak ada pos penyaluran laba yang memiliki akun COA untuk dijurnal.');
+
+            return;
+        }
+
+        try {
+            DB::transaction(function () use (
+                $outflowRows, $closingDate, $cashAccount
+            ) {
+                // Re-check under a row lock so the guard and the insert are atomic. The
+                // unique key added in migration 2026_11_09_000000 is the final backstop;
+                // this turns a would-be constraint violation into a clean message.
+                $alreadyClosed = ProfitAllocationClosing::where('period_mode', $this->mode)
+                    ->where('period_key', $this->periodKey)
+                    ->lockForUpdate()
+                    ->exists();
+
+                if ($alreadyClosed) {
+                    throw new \RuntimeException('Alokasi laba untuk periode ini sudah pernah diterapkan.');
+                }
+
+                $createdJournalIds = [];
+                $periodLabel = $this->periodLabel();
+
+                // Process Outflow (KBM vouchers - Kas keluar untuk penyaluran laba)
+                $kbmBatch = VoucherNumber::nextBatch('KBM', $closingDate, $outflowRows->count());
+                foreach ($outflowRows as $idx => $row) {
+                    $targetAccount = Account::find($row['account_id']);
+                    if (! $targetAccount) {
+                        continue;
+                    }
+
+                    $voucher = $kbmBatch[$idx];
+                    $amount = (float) $row['amount'];
+                    $desc = "Alokasi Laba Keluar ({$periodLabel}): {$row['description']}";
+
+                    $debitEntry = JournalEntry::create([
+                        'voucher_number' => $voucher,
+                        'transaction_date' => $closingDate,
+                        'description' => $desc,
+                        'account_id' => $targetAccount->id,
+                        'debit' => $amount,
+                        'credit' => 0,
+                        'daily_transaction_id' => null,
+                        'business_unit_id' => null,
+                    ]);
+
+                    $creditEntry = JournalEntry::create([
+                        'voucher_number' => $voucher,
+                        'transaction_date' => $closingDate,
+                        'description' => $desc,
+                        'account_id' => $cashAccount->id,
+                        'debit' => 0,
+                        'credit' => $amount,
+                        'daily_transaction_id' => null,
+                        'business_unit_id' => null,
+                    ]);
+
+                    $createdJournalIds[] = $debitEntry->id;
+                    $createdJournalIds[] = $creditEntry->id;
+                }
+
+                ProfitAllocationClosing::create([
+                    'period_mode' => $this->mode,
+                    'period_key' => $this->periodKey,
+                    'closing_date' => $closingDate,
+                    'net_income' => $this->netIncome,
+                    'total_outflow' => $this->totalOutflow,
+                    'total_retained' => $this->totalRetained,
+                    'journal_ids' => $createdJournalIds,
+                    'created_by' => Auth::id(),
+                ]);
+            });
+
+            $this->showClosingConfirmModal = false;
+            $this->dispatch('swal-alert', icon: 'success', title: 'Berhasil Diterapkan', text: 'Jurnal otomatis alokasi laba berhasil dibuat dan disinkronkan ke buku besar.');
+        } catch (\Throwable $e) {
+            report($e);
+            $this->dispatch('swal-alert', icon: 'error', title: 'Gagal Memproses Jurnal', text: $e->getMessage());
+        }
+    }
+
+    public function rollbackAllocation(): void
+    {
+        if (! $this->canEdit) {
+            abort(403);
+        }
+
+        $closing = $this->currentClosing;
+        if (! $closing) {
+            return;
+        }
+
+        try {
+            DB::transaction(function () use ($closing) {
+                if (! empty($closing->journal_ids)) {
+                    JournalEntry::whereIn('id', $closing->journal_ids)->delete();
+                }
+                $closing->delete();
+            });
+
+            $this->showRollbackConfirmModal = false;
+            $this->dispatch('swal-alert', icon: 'success', title: 'Jurnal Dibatalkan', text: 'Jurnal alokasi laba periode ini telah dihapus. Saldo kembali sebelum alokasi.');
+        } catch (\Throwable $e) {
+            report($e);
+            $this->dispatch('swal-alert', icon: 'error', title: 'Gagal Membatalkan Jurnal', text: $e->getMessage());
+        }
     }
 
     // ─── Preview PDF (inline, via ReportPreviewController) ────────────────
@@ -452,13 +913,18 @@ class ProfitAllocation extends Component
         $adArtRows = $this->adArtRows;
         $totalAdArtPercent = $this->totalAdArtPercent;
         $totalAdArtAmount = $this->totalAdArtAmount;
+        $totalOutflow = $this->totalOutflow;
+        $totalRetained = $this->totalRetained;
+        $totalAllocated = $this->totalAllocated;
+        $unallocatedProfit = $this->unallocatedProfit;
 
         set_time_limit(120);
 
         $pdf = Pdf::loadView('pdf.profit-allocation', array_merge(compact(
             'entityName', 'printDate', 'signatureDate', 'periodLabel', 'signatory', 'position',
             'netIncome', 'deductionRows', 'totalDeductions', 'deductionLabel', 'netIncomeAfterDeductions',
-            'adArtRows', 'totalAdArtPercent', 'totalAdArtAmount'
+            'adArtRows', 'totalAdArtPercent', 'totalAdArtAmount',
+            'totalOutflow', 'totalRetained', 'totalAllocated', 'unallocatedProfit'
         ), ['showSignature' => $this->showSignature]))->setPaper('a4', 'portrait');
 
         return [$pdf, PdfExport::filename('Alokasi Laba', 'BUMDes', $periodLabel)];

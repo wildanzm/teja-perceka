@@ -147,7 +147,7 @@
                                 {{ \Carbon\Carbon::parse($journal->transaction_date)->translatedFormat('d M Y') }}
                             </td>
                             <td class="py-3.5 px-4 whitespace-nowrap">
-                                <span class="text-xs font-semibold text-zinc-600">{{ $journal->in_memory_voucher ?? 'DBM' }}</span>
+                                <span class="text-xs font-semibold text-zinc-600">{{ $journal->voucher_number }}</span>
                             </td>
                             <td class="py-3.5 px-4">
                                 <span class="text-sm text-zinc-700 line-clamp-2">{{ $journal->description }}</span>
@@ -213,7 +213,7 @@
                 <div class="p-4 space-y-2">
                     <div class="flex items-center justify-between">
                         <span class="text-xs text-zinc-500">{{ \Carbon\Carbon::parse($journal->transaction_date)->translatedFormat('d M Y') }}</span>
-                        <span class="text-xs font-semibold text-zinc-600">{{ $journal->in_memory_voucher ?? 'DBM' }}</span>
+                        <span class="text-xs font-semibold text-zinc-600">{{ $journal->voucher_number }}</span>
                     </div>
                     <p class="text-sm text-zinc-700 font-medium">{{ $journal->description }}</p>
                     <div class="flex items-center gap-2">

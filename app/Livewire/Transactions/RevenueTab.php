@@ -186,7 +186,9 @@ class RevenueTab extends Component
                 ->whereHas('account', fn ($q) => $q->whereIn('type', ['pendapatan', 'pendapatan_lain']))
                 ->sum(DB::raw('credit - debit'));
 
-            $opening = BumdesCashBalance::getOpeningBalance($start);
+            // Daily mode shows only what came in that day; the cumulative
+            // opening balance belongs to monthly/periodic reports, not daily.
+            $opening = $this->mode === 'daily' ? 0.0 : BumdesCashBalance::getOpeningBalance($start);
             $revenue = $opening + BumdesCashBalance::getTotalNetUnitIncome($start, $end) + $directRevenue;
 
             $expenses = (float) JournalEntry::where('voucher_number', 'like', 'KBM%')

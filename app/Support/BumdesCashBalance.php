@@ -47,23 +47,14 @@ class BumdesCashBalance
 
         // Unit legs: daily legs plus manually recorded unit journals.
         // KBM legs are excluded here — they live in the BUMDes scope above.
-        $unitLegs = JournalEntry::whereDate('transaction_date', '<', $day)
-            ->where(function ($query) {
-                $query->whereNotNull('daily_transaction_id')
-                    ->orWhere(function ($sub) {
-                        $sub->whereNotNull('business_unit_id')
-                            ->where('voucher_number', 'not like', 'KBM%');
-                    });
-            });
+        // Deficit units are skipped (same rule as getNetIncomePerUnit), so a
+        // loss-making unit never reduces the BUMDes cash balance.
+        $unitNetIncome = (float) self::getNetIncomePerUnit(
+            '1970-01-01',
+            Carbon::parse($startDate)->copy()->subDay()
+        )->sum('amount');
 
-        $unitRevenue = (float) (clone $unitLegs)
-            ->whereHas('account', fn ($query) => $query->whereIn('type', ['pendapatan', 'pendapatan_lain']))
-            ->sum(DB::raw('credit - debit'));
-        $unitExpenses = (float) (clone $unitLegs)
-            ->whereHas('account', fn ($query) => $query->whereIn('type', ['hpp', 'beban', 'beban_lain']))
-            ->sum(DB::raw('debit - credit'));
-
-        $openingBalance = ($revenue + $unitRevenue) - ($expenses + $unitExpenses);
+        $openingBalance = ($revenue - $expenses) + $unitNetIncome;
 
         // Manual opening balances (cash carried in from before the app
         // started) apply from their month onward.
@@ -113,8 +104,10 @@ class BumdesCashBalance
             $revenue = (float) $rows->whereIn('type', ['pendapatan', 'pendapatan_lain'])->sum('net_credit');
             $expenses = (float) $rows->whereIn('type', ['hpp', 'beban', 'beban_lain'])->sum('net_debit');
 
-            // Net unit revenue = ledger revenue - ledger expenses
-            $netAmount = max(0.0, $revenue - $expenses);
+            // Net unit revenue = ledger revenue - ledger expenses.
+            // Deficit units (net <= 0) are skipped entirely: they do not generate
+            // virtual revenue entries and do not reduce BUMDes cash.
+            $netAmount = $revenue - $expenses;
 
             if ($netAmount > 0) {
                 $results->push([
@@ -290,6 +283,7 @@ class BumdesCashBalance
         $max = JournalEntry::where('voucher_number', 'like', 'DBM%')
             ->whereBetween('transaction_date', [$start, $end])
             ->pluck('voucher_number')
+            ->filter(fn ($number) => preg_match('/^DBM\d+$/', (string) $number))
             ->map(fn ($number) => (int) substr((string) $number, 3))
             ->max();
 
@@ -297,22 +291,15 @@ class BumdesCashBalance
     }
 
     /**
-     * Merge real BUMDes journal transactions with virtual entries and sort them chronologically.
+     * Sequence in-memory voucher numbers (DBM001, DBM002, ...) for all DBM entries chronologically.
+     *
+     * @param  Collection<int, JournalEntry>  $entries
+     * @return Collection<int, JournalEntry>
      */
-    public static function attachToTransactions(
-        Collection $transactions,
-        Carbon|string $startDate,
-        Carbon|string $endDate,
-        string $mode = 'monthly',
-        string $sortField = 'transaction_date',
-        string $sortDirection = 'asc'
-    ): Collection {
-        $virtualEntries = self::getBumdesVirtualEntries($startDate, $endDate, $mode);
-        $allTransactions = $transactions->concat($virtualEntries);
-
-        // Sequence in-memory voucher numbers (DBM001, DBM002, ...) for all DBM entries chronologically
+    public static function sequenceDbmVouchers(Collection $entries): Collection
+    {
         $dbmGroups = [];
-        foreach ($allTransactions as $entry) {
+        foreach ($entries as $entry) {
             if (! str_starts_with((string) $entry->voucher_number, 'DBM')) {
                 continue;
             }
@@ -358,6 +345,24 @@ class BumdesCashBalance
                 }
             }
         }
+
+        return $entries;
+    }
+
+    /**
+     * Merge real BUMDes journal transactions with virtual entries and sort them chronologically.
+     */
+    public static function attachToTransactions(
+        Collection $transactions,
+        Carbon|string $startDate,
+        Carbon|string $endDate,
+        string $mode = 'monthly',
+        string $sortField = 'transaction_date',
+        string $sortDirection = 'asc'
+    ): Collection {
+        $virtualEntries = self::getBumdesVirtualEntries($startDate, $endDate, $mode);
+        $allTransactions = self::sequenceDbmVouchers($transactions->concat($virtualEntries));
+
         $isDescending = strtolower($sortDirection) === 'desc';
 
         return $allTransactions->sort(function ($first, $second) use ($sortField, $isDescending) {

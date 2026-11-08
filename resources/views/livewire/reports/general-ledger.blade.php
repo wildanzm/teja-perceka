@@ -72,8 +72,8 @@
                     <thead class="text-xs text-zinc-700 uppercase bg-zinc-50 border-b border-zinc-200">
                         <tr>
                             <th scope="col" class="px-5 py-4 whitespace-nowrap">Tanggal</th>
-                            <th scope="col" class="px-5 py-4 whitespace-nowrap">Keterangan</th>
                             <th scope="col" class="px-5 py-4 whitespace-nowrap">Nomor Bukti</th>
+                            <th scope="col" class="px-5 py-4 whitespace-nowrap">Keterangan</th>
                             <th scope="col" class="px-5 py-4 text-right whitespace-nowrap">Debit</th>
                             <th scope="col" class="px-5 py-4 text-right whitespace-nowrap">Kredit</th>
                             <th scope="col" class="px-5 py-4 text-right whitespace-nowrap bg-brand-50/50">Saldo</th>
@@ -96,11 +96,11 @@
                                 <td class="px-5 py-4 whitespace-nowrap font-medium text-zinc-900">
                                     {{ $journal->transaction_date->translatedFormat('d F Y') }}
                                 </td>
+                                <td class="px-5 py-4 whitespace-nowrap text-xs text-zinc-600">
+                                    {{ $journal->voucher_number }}
+                                </td>
                                 <td class="px-5 py-4 min-w-[200px]">
                                     {{ $journal->description }}
-                                </td>
-                                <td class="px-5 py-4 whitespace-nowrap text-xs">
-                                    {{ $journal->voucher_number }}
                                 </td>
                                 <td class="px-5 py-4 text-right font-medium whitespace-nowrap {{ $journal->debit > 0 ? 'text-zinc-900' : 'text-zinc-400' }}">
                                     {{ $journal->debit > 0 ? number_format($journal->debit, 0, ',', '.') : '-' }}

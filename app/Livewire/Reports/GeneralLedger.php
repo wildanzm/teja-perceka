@@ -174,6 +174,11 @@ class GeneralLedger extends Component
                     });
                 } elseif ($this->unit_id && is_numeric($this->unit_id)) {
                     $currentQuery->where('business_unit_id', (int) $this->unit_id);
+                } else {
+                    // Fail closed. isBumdesScope() conjoins a role test with a unit-value
+                    // test, so a kepala_unit whose unit is missing reaches neither branch;
+                    // falling through would silently return every unit's rows.
+                    abort(403, 'Unit scope tidak dapat ditentukan untuk laporan ini.');
                 }
 
                 $transactions = $currentQuery->get();
@@ -188,13 +193,18 @@ class GeneralLedger extends Component
                     $relevantVirtuals = $virtualEntries->filter(fn ($entry) => $entry->account_id === $selectedAccount->id);
 
                     if ($relevantVirtuals->isNotEmpty()) {
-                        $transactions = $transactions->concat($relevantVirtuals)->sortBy([
-                            fn ($a, $b) => $a->transaction_date <=> $b->transaction_date,
-                            fn ($a, $b) => $a->id <=> $b->id,
-                        ])->values();
+                        $transactions = $transactions->concat($relevantVirtuals);
                         $totalDebit += $relevantVirtuals->sum('debit');
                         $totalCredit += $relevantVirtuals->sum('credit');
                     }
+                }
+
+                if ($this->isBumdesScope()) {
+                    $transactions = BumdesCashBalance::sequenceDbmVouchers($transactions)->sortBy([
+                        fn ($a, $b) => $a->transaction_date <=> $b->transaction_date,
+                        fn ($a, $b) => $a->voucher_number <=> $b->voucher_number,
+                        fn ($a, $b) => $a->id <=> $b->id,
+                    ])->values();
                 }
             }
         }
@@ -211,6 +221,13 @@ class GeneralLedger extends Component
      */
     public function buildReportPdf(): array
     {
+        // Re-pin the unit head exactly as render() does, so the export path does not
+        // depend on the caller (ReportPreviewController) having scoped correctly.
+        $user = Auth::user();
+        if ($user && $user->hasRole('kepala_unit')) {
+            $this->unit_id = $user->business_unit_id;
+        }
+
         $data = $this->reportData;
         if (! $data['selectedAccount']) {
             abort(404, 'Kode Akun tidak ditemukan.');
