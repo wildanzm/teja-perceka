@@ -6,7 +6,7 @@
     <x-settings.layout :heading="__('Keamanan')" :subheading="__('Kelola kata sandi dan keamanan akun Anda.')">
         <div class="flex flex-col gap-4 my-6 w-full max-w-xl">
 
-            {{-- Kartu kata sandi --}}
+            {{-- Password card --}}
             <div class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
                 <div class="flex items-start gap-4">
                     <span class="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-700">
@@ -25,7 +25,7 @@
             </div>
 
             @if ($canManageTwoFactor)
-                {{-- Kartu 2FA --}}
+                {{-- Two-factor authentication card --}}
                 <div class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
                     <div class="flex items-start gap-4">
                         <span class="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-700">
@@ -79,7 +79,7 @@
             @endif
 
             @if ($canManagePasskeys)
-                {{-- Kartu passkey --}}
+                {{-- Passkey card --}}
                 <div class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
                     <div class="flex items-start gap-4">
                         <span class="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-700">
@@ -142,7 +142,7 @@
         </div>
     </x-settings.layout>
 
-    {{-- Modal ubah kata sandi --}}
+    {{-- Change password modal --}}
     @if ($showPasswordModal)
         <div class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Ubah Kata Sandi">
             <button type="button" wire:click="closePasswordModal" aria-label="Tutup" class="absolute inset-0 cursor-default bg-white/70 backdrop-blur-[3px]"></button>
@@ -235,7 +235,7 @@
     @endif
 
     @if ($canManageTwoFactor && $showModal)
-        {{-- Modal aktifkan dan verifikasi 2FA --}}
+        {{-- Enable and verify two-factor authentication modal --}}
         <div class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="{{ $this->modalConfig['title'] }}">
             <button type="button" wire:click="closeModal" aria-label="Tutup" class="absolute inset-0 cursor-default bg-white/70 backdrop-blur-[3px]"></button>
             <div class="relative w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-xl">
@@ -323,7 +323,7 @@
         </div>
     @endif
     @if ($canManagePasskeys && $showPasskeyModal)
-        {{-- Modal tambah passkey --}}
+        {{-- Add passkey modal --}}
         <div class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Tambah Passkey" x-data="passkeyManager()" x-init="init()">
             <button type="button" wire:click="closePasskeyModal" aria-label="Tutup" class="absolute inset-0 cursor-default bg-white/70 backdrop-blur-[3px]"></button>
             <div class="relative w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-xl">

@@ -14,49 +14,49 @@
 
     <!-- Stat cards -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <div class="bg-white border border-zinc-200 rounded-2xl p-5 shadow-sm">
+        <div class="bg-gradient-to-br from-emerald-50 via-white to-white border border-emerald-200/80 rounded-2xl p-5 shadow-sm">
             <div class="flex items-center justify-between">
                 <div>
                     <p class="text-xs font-semibold uppercase tracking-wider text-zinc-500">Total Pengguna</p>
                     <h3 class="text-2xl font-bold text-zinc-900 mt-1">{{ number_format($totalUsers) }}</h3>
                 </div>
-                <div class="p-3 bg-emerald-100 text-emerald-600 rounded-xl">
+                <div class="p-3 bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200/70 rounded-xl">
                     <flux:icon icon="users" class="size-6" />
                 </div>
             </div>
         </div>
 
-        <div class="bg-white border border-zinc-200 rounded-2xl p-5 shadow-sm">
+        <div class="bg-gradient-to-br from-cyan-50 via-white to-white border border-cyan-200/80 rounded-2xl p-5 shadow-sm">
             <div class="flex items-center justify-between">
                 <div>
                     <p class="text-xs font-semibold uppercase tracking-wider text-zinc-500">Unit Usaha</p>
                     <h3 class="text-2xl font-bold text-zinc-900 mt-1">{{ number_format($totalUnits) }}</h3>
                 </div>
-                <div class="p-3 bg-cyan-100 text-cyan-600 rounded-xl">
+                <div class="p-3 bg-cyan-50 text-cyan-600 ring-1 ring-cyan-200/70 rounded-xl">
                     <flux:icon icon="building-office-2" class="size-6" />
                 </div>
             </div>
         </div>
 
-        <div class="bg-white border border-zinc-200 rounded-2xl p-5 shadow-sm">
+        <div class="bg-gradient-to-br from-purple-50 via-white to-white border border-purple-200/80 rounded-2xl p-5 shadow-sm">
             <div class="flex items-center justify-between">
                 <div>
                     <p class="text-xs font-semibold uppercase tracking-wider text-zinc-500">Jumlah Role</p>
                     <h3 class="text-2xl font-bold text-zinc-900 mt-1">{{ number_format($totalRoles) }}</h3>
                 </div>
-                <div class="p-3 bg-purple-100 text-purple-600 rounded-xl">
+                <div class="p-3 bg-purple-50 text-purple-600 ring-1 ring-purple-200/70 rounded-xl">
                     <flux:icon icon="key" class="size-6" />
                 </div>
             </div>
         </div>
 
-        <div class="bg-white border border-zinc-200 rounded-2xl p-5 shadow-sm">
+        <div class="bg-gradient-to-br from-amber-50 via-white to-white border border-amber-200/80 rounded-2xl p-5 shadow-sm">
             <div class="flex items-center justify-between">
                 <div>
                     <p class="text-xs font-semibold uppercase tracking-wider text-zinc-500">Aktivitas Hari Ini</p>
                     <h3 class="text-2xl font-bold text-zinc-900 mt-1">{{ number_format($todayActivities) }}</h3>
                 </div>
-                <div class="p-3 bg-amber-100 text-amber-600 rounded-xl">
+                <div class="p-3 bg-amber-50 text-amber-600 ring-1 ring-amber-200/70 rounded-xl">
                     <flux:icon icon="bolt" class="size-6" />
                 </div>
             </div>

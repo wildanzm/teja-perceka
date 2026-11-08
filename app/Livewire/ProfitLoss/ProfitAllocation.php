@@ -97,7 +97,7 @@ class ProfitAllocation extends Component
         }
     }
 
-    // ─── Helpers ─────────────────────────────────────────────────────────
+    // Helpers
 
     public function periodRange(): array
     {
@@ -168,7 +168,7 @@ class ProfitAllocation extends Component
         if ($this->mode === 'semester') {
             $year = SafeDates::year($this->semesterYear);
 
-            // Bukan '1' => semester 2: samakan dengan periodRange().
+            // Any value other than '1' means semester 2, mirroring periodRange().
             $semester = $this->semester === '1' ? '1' : '2';
 
             return 'semester-'.$semester.'-'.$year;
@@ -194,7 +194,7 @@ class ProfitAllocation extends Component
             ->get();
     }
 
-    // ─── Calculation Data ────────────────────────────────────────────────
+    // Calculation Data
 
     private function sumAccountBalance(string $type, string $normalDirection, array $range): float
     {
@@ -451,7 +451,7 @@ class ProfitAllocation extends Component
         return ! Auth::user()->hasAnyRole(['kepala_desa', 'pengawas']);
     }
 
-    // ─── Modal Actions ───────────────────────────────────────────────────
+    // Modal Actions
 
     /**
      * Ensure this specific period has its own distinct set of records
@@ -494,6 +494,50 @@ class ProfitAllocation extends Component
                 ]);
             }
         });
+    }
+
+    /**
+     * Drop every cached #[Computed] value that depends on allocation data or on whether the
+     * period is closed.
+     *
+     * Livewire memoises each #[Computed] in BaseComputed::$requestCachedValue and only
+     * re-evaluates when that slot is empty (BaseComputed::handleMagicGet). From the magic
+     * methods, unset($this->prop) routes to handleMagicUnset(), which clears the slot. Without
+     * this call a mutating action would persist its write but keep serving the pre-write
+     * values for the rest of the response: the deleted row still renders, and the
+     * apply/rollback buttons keep their old enabled state until a manual page refresh.
+     *
+     * The dependency chain is transitive — currentClosing feeds isLocked, and allocationRows
+     * feeds deductionRows/adArtRows and therefore every total — so the whole set is cleared
+     * rather than only the properties the caller happens to read.
+     */
+    private function forgetAllocationState(): void
+    {
+        $computed = [
+            'periodKey',
+            'currentClosing',
+            'isLocked',
+            'allocationRows',
+            'deductionRows',
+            'deductionLabel',
+            'totalDeductions',
+            'netIncomeAfterDeductions',
+            'adArtRows',
+            'totalAdArtPercent',
+            'totalAdArtAmount',
+            'totalOutflow',
+            'totalRetained',
+            'totalAllocated',
+            'unallocatedProfit',
+            'netIncome',
+            'availableAccounts',
+            'canEdit',
+            'showSignature',
+        ];
+
+        foreach ($computed as $property) {
+            unset($this->{$property});
+        }
     }
 
     private function guardNotLocked(): bool
@@ -654,6 +698,10 @@ class ProfitAllocation extends Component
 
         $this->closeModal();
         $this->dispatch('swal-alert', icon: 'success', title: 'Berhasil', text: $isEdit ? 'Baris alokasi berhasil diperbarui untuk periode ini.' : 'Baris alokasi berhasil ditambahkan untuk periode ini.');
+
+        // Added, edited and renamed rows change allocationRows and every total derived
+        // from it, so the table must be rebuilt in this same response.
+        $this->forgetAllocationState();
     }
 
     public function confirmDelete(string $description): void
@@ -725,9 +773,13 @@ class ProfitAllocation extends Component
 
         $this->showDeleteModal = false;
         $this->deleteDescription = null;
+
+        // The row is gone from the database but still memoised in allocationRows; without
+        // this the deleted position keeps rendering until a manual page refresh.
+        $this->forgetAllocationState();
     }
 
-    // ─── Automatic Journal Posting Actions ───────────────────────────────
+    // Automatic Journal Posting Actions
 
     public function applyAllocation(): void
     {
@@ -767,8 +819,8 @@ class ProfitAllocation extends Component
         $cashAccount = Account::where('code', '1-1100')->first()
             ?? Account::where('type', 'aktiva')->where('is_header', false)->first();
 
-        // Hanya alokasi penyaluran laba (outflow / kas keluar) yang dicatat ke jurnal umum & buku besar.
-        // Pos cadangan modal (retained) tidak dicatat ke jurnal / tidak mengkredit kas.
+        // Only profit-distribution positions (outflow / cash out) reach the general journal
+        // and the ledger. Retained-earnings positions are not journalled and never credit cash.
         $outflowRows = $allRows->where('flow_type', 'outflow')->filter(fn ($r) => ! empty($r['account_id']))->values();
 
         if ($outflowRows->isEmpty()) {
@@ -796,7 +848,8 @@ class ProfitAllocation extends Component
                 $createdJournalIds = [];
                 $periodLabel = $this->periodLabel();
 
-                // Process Outflow (KBM vouchers - Kas keluar untuk penyaluran laba)
+                // Book each outflow position as a KBM (cash-out) voucher: debit the
+                // position's COA account, credit cash.
                 $kbmBatch = VoucherNumber::nextBatch('KBM', $closingDate, $outflowRows->count());
                 foreach ($outflowRows as $idx => $row) {
                     $targetAccount = Account::find($row['account_id']);
@@ -848,6 +901,10 @@ class ProfitAllocation extends Component
 
             $this->showClosingConfirmModal = false;
             $this->dispatch('swal-alert', icon: 'success', title: 'Berhasil Diterapkan', text: 'Jurnal otomatis alokasi laba berhasil dibuat dan disinkronkan ke buku besar.');
+
+            // A closing now exists: isLocked/currentClosing must flip in this response,
+            // otherwise the Create/Edit/Delete buttons stay enabled after applying.
+            $this->forgetAllocationState();
         } catch (\Throwable $e) {
             report($e);
             $this->dispatch('swal-alert', icon: 'error', title: 'Gagal Memproses Jurnal', text: $e->getMessage());
@@ -875,14 +932,17 @@ class ProfitAllocation extends Component
 
             $this->showRollbackConfirmModal = false;
             $this->dispatch('swal-alert', icon: 'success', title: 'Jurnal Dibatalkan', text: 'Jurnal alokasi laba periode ini telah dihapus. Saldo kembali sebelum alokasi.');
+
+            // The closing row is deleted, so isLocked must become false and the buttons
+            // re-enable in this same response instead of after a manual refresh.
+            $this->forgetAllocationState();
         } catch (\Throwable $e) {
             report($e);
             $this->dispatch('swal-alert', icon: 'error', title: 'Gagal Membatalkan Jurnal', text: $e->getMessage());
         }
     }
 
-    // ─── Preview PDF (inline, via ReportPreviewController) ────────────────
-
+    // Preview PDF (inline, via ReportPreviewController)
     /**
      * Build the allocation PDF for inline preview.
      *

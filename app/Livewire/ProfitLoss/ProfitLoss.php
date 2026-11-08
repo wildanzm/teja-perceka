@@ -141,8 +141,7 @@ class ProfitLoss extends Component
         return $q;
     }
 
-    // ─── Computed ────────────────────────────────────────────────────────
-
+    // Computed
     #[Computed]
     public function units(): \Illuminate\Database\Eloquent\Collection
     {
@@ -171,8 +170,8 @@ class ProfitLoss extends Component
             ->groupBy('account_id')
             ->pluck('amount', 'account_id');
 
-        // BUMDes scope: add virtual revenue (saldo sebelumnya + net income per unit)
-        // to account 4-2000, mirroring virtual journal entries DBM001/DBM002+.
+        // BUMDes scope: virtual revenue (prior cash balance + per-unit net income) is added
+        // to account 4-2000, mirroring the virtual DBM001/DBM002+ journal entries.
         if ($this->isBumdesScope() && $type === 'pendapatan') {
             [$start, $end] = $this->periodRange();
             $revenueAccount = Account::where('code', '4-2000')->first();
@@ -238,7 +237,7 @@ class ProfitLoss extends Component
     }
 
     /**
-     * Kepala desa dan pengawas hanya melihat angka: tanpa blok tanda tangan.
+     * Kepala desa and pengawas see the figures only, with no signature block.
      */
     #[Computed]
     public function showSignature(): bool
@@ -252,8 +251,7 @@ class ProfitLoss extends Component
         return ($this->unit_id && is_numeric($this->unit_id)) ? BusinessUnit::find($this->unit_id) : null;
     }
 
-    // ─── Preview PDF (inline, via ReportPreviewController) ────────────────
-
+    // Preview PDF (inline, via ReportPreviewController)
     /**
      * Build the profit-loss PDF for inline preview.
      *

@@ -6,7 +6,7 @@
     <div class="bg-white p-4 sm:p-6 rounded-xl border border-brand-100 shadow-sm">
         <div class="flex flex-col md:flex-row gap-4 sm:gap-6 md:items-end justify-between">
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 flex-1">
-                {{-- Mode Periode --}}
+                {{-- Period Mode --}}
                 <div class="flex flex-col gap-1.5">
                     <label class="text-sm font-medium text-zinc-700">Mode Periode</label>
                     <select wire:model.live.debounce.250ms="mode"
@@ -60,7 +60,7 @@
                 </div>
             </div>
 
-            {{-- Action Alokasi/ Otomatis --}}
+            {{-- Allocation / Automatic Actions --}}
             @if($this->canEdit)
                 <div class="flex items-center gap-2.5 shrink-0">
                     @if($this->currentClosing)
@@ -88,7 +88,7 @@
 
     {{-- Summary Cards --}}
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {{-- Total Laba Bersih --}}
+        {{-- Total Net Income --}}
         <div class="relative overflow-hidden rounded-2xl border border-brand-200/80 bg-gradient-to-br from-brand-50 via-white to-white p-4 sm:p-5 shadow-sm transition-shadow hover:shadow-md">
             <div class="flex items-start justify-between gap-3">
                 <span class="flex size-9 items-center justify-center rounded-xl bg-brand-600 text-white shadow-sm shadow-brand-600/30">
@@ -107,7 +107,7 @@
             <p class="mt-2 text-[11px] font-medium text-brand-700/60">Periode berjalan</p>
         </div>
 
-        {{-- Penyaluran Laba --}}
+        {{-- Profit Distribution --}}
         <div class="relative overflow-hidden rounded-2xl border border-amber-200/80 bg-gradient-to-br from-amber-50 via-white to-white p-4 sm:p-5 shadow-sm transition-shadow hover:shadow-md">
             <div class="flex items-start justify-between gap-3">
                 <span class="flex size-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600 ring-1 ring-amber-200/70">
@@ -126,7 +126,7 @@
             <p class="mt-2 text-[11px] text-zinc-500">PADes Desa, bagi hasil, pajak, sosial, bonus</p>
         </div>
 
-        {{-- Cadangan Modal --}}
+        {{-- Capital Reserve --}}
         <div class="relative overflow-hidden rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-white p-4 sm:p-5 shadow-sm transition-shadow hover:shadow-md">
             <div class="flex items-start justify-between gap-3">
                 <span class="flex size-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200/70">
@@ -145,7 +145,7 @@
             <p class="mt-2 text-[11px] text-zinc-500">Disimpan untuk modal operasional BUMDes</p>
         </div>
 
-        {{-- Sisa Laba --}}
+        {{-- Remaining Profit --}}
         <div class="relative overflow-hidden rounded-2xl border p-4 sm:p-5 shadow-sm transition-shadow hover:shadow-md {{ $this->unallocatedProfit < 0 ? 'border-red-200/80 bg-gradient-to-br from-red-50 via-white to-white' : 'border-zinc-200/80 bg-gradient-to-br from-zinc-100 via-white to-white' }}">
             <div class="flex items-start justify-between gap-3">
                 <span class="flex size-9 items-center justify-center rounded-xl {{ $this->unallocatedProfit < 0 ? 'bg-red-50 text-red-600 ring-1 ring-red-200/70' : 'bg-zinc-100 text-zinc-600 ring-1 ring-zinc-200/70' }}">
@@ -203,7 +203,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {{-- ── LABA BERSIH TAHUN BERJALAN ── --}}
+                    {{-- CURRENT-YEAR NET INCOME --}}
                     <tr class="bg-zinc-100/50 border-b border-zinc-200">
                         <td class="px-4 sm:px-6 py-3 text-xs font-bold text-zinc-900 uppercase tracking-wider" colspan="3">
                             LABA BERSIH
@@ -214,7 +214,7 @@
                         @if($this->canEdit)<td></td>@endif
                     </tr>
 
-                    {{-- ── POS PENGURANG ── --}}
+                    {{-- DEDUCTION ITEMS --}}
                     @forelse ($this->deductionRows as $row)
                         <tr class="hover:bg-zinc-50 transition-colors border-b border-zinc-100">
                             <td class="px-4 sm:px-6 py-3 text-zinc-800 pl-8 sm:pl-10">
@@ -286,7 +286,7 @@
                         </tr>
                     @endforelse
 
-                    {{-- ── Laba setelah pengurang ── --}}
+                    {{-- Profit after deductions --}}
                     <tr class="bg-zinc-100/70 border-y border-zinc-300">
                         <td class="px-4 sm:px-6 py-3 font-bold text-zinc-900 text-xs uppercase" colspan="3">
                             Laba/Rugi Bersih setelah {{ $this->deductionLabel }}
@@ -297,14 +297,14 @@
                         @if($this->canEdit)<td></td>@endif
                     </tr>
 
-                    {{-- ── SECTION AD/ART HEADER ── --}}
+                    {{-- AD/ART SECTION HEADER --}}
                     <tr class="bg-zinc-50 border-b border-zinc-200">
                         <td class="px-4 sm:px-6 py-2.5 text-xs font-bold text-zinc-600 uppercase tracking-wider" colspan="{{ $this->canEdit ? 5 : 4 }}">
                             Alokasi Laba Bersih sesuai AD/ART
                         </td>
                     </tr>
 
-                    {{-- ── POS AD/ART ── --}}
+                    {{-- AD/ART ITEMS --}}
                     @forelse ($this->adArtRows as $row)
                         <tr class="hover:bg-zinc-50 transition-colors border-b border-zinc-100">
                             <td class="px-4 sm:px-6 py-3 text-zinc-800 pl-8 sm:pl-10">
@@ -376,7 +376,7 @@
                         </tr>
                     @endforelse
 
-                    {{-- ── Total AD/ART ── --}}
+                    {{-- AD/ART total --}}
                     @if($this->adArtRows->count() > 0)
                         <tr class="bg-zinc-50 border-t-2 border-zinc-300">
                             <td class="px-4 sm:px-6 py-3.5 font-bold text-zinc-900 uppercase text-xs" colspan="2">TOTAL AD/ART</td>
@@ -407,7 +407,7 @@
 
     <x-report-actions :preview-url="route('reports.profit-allocation.preview', ['mode' => $mode, 'period' => $period, 'semester' => $semester, 'semester_year' => $semesterYear])" sticky />
 
-    {{-- ============================ ADD / EDIT MODAL ============================ --}}
+    {{-- ADD / EDIT MODAL --}}
     @if($showModal && $this->canEdit)
         <div class="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="modal-title">
             <div class="flex min-h-full items-center justify-center p-4">
@@ -427,7 +427,7 @@
                     </div>
 
                     <form wire:submit.prevent="saveRow" class="p-6 space-y-5">
-                        {{-- Keterangan Pos --}}
+                        {{-- Item description --}}
                         <div>
                             <label for="formDescription" class="block text-sm font-medium text-zinc-700 mb-1.5">
                                 Keterangan Pos Alokasi <span class="text-red-500">*</span>
@@ -440,7 +440,7 @@
                         </div>
 
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                            {{-- Jenis Alokasi --}}
+                            {{-- Allocation type --}}
                             <div>
                                 <label class="block text-sm font-medium text-zinc-700 mb-1.5">Jenis Alokasi</label>
                                 <div x-data="{
@@ -485,7 +485,7 @@
                                 @enderror
                             </div>
 
-                            {{-- Peruntukan Dana --}}
+                            {{-- Fund designation --}}
                             <div>
                                 <label class="block text-sm font-medium text-zinc-700 mb-1.5">Peruntukan Dana</label>
                                 <div x-data="{
@@ -531,7 +531,7 @@
                             </div>
                         </div>
 
-                        {{-- Bentuk Alokasi: Persentase vs Nominal --}}
+                        {{-- Allocation form: percentage vs nominal --}}
                         <div>
                             <label class="block text-sm font-medium text-zinc-700 mb-1.5">Bentuk Perhitungan <span class="text-red-500">*</span></label>
                             <div class="grid grid-cols-2 gap-3">
@@ -546,7 +546,7 @@
                             </div>
                         </div>
 
-                        {{-- Input Nilai --}}
+                        {{-- Value input --}}
                         @if($formCalcType === 'percentage')
                             <div>
                                 <label for="formPercentage" class="block text-sm font-medium text-zinc-700 mb-1.5">Persentase <span class="text-red-500">*</span></label>
@@ -575,7 +575,7 @@
                             </div>
                         @endif
 
-                        {{-- Akun COA Terkait (Buku Besar) --}}
+                        {{-- Related COA account (general ledger) --}}
                         <div x-show="$wire.formFlowType === 'outflow'">
                             <div class="flex items-center justify-between mb-1.5">
                                 <label class="block text-sm font-medium text-zinc-700">Pilih Kode Akun (Beban Penyaluran)</label>
@@ -655,7 +655,7 @@
         </div>
     @endif
 
-    {{-- ============================ APPLY CLOSING CONFIRM MODAL ============================ --}}
+    {{-- APPLY CLOSING CONFIRMATION MODAL --}}
     @if ($showClosingConfirmModal)
         <div class="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="closing-modal-title">
             <div class="flex min-h-full items-center justify-center p-4">
@@ -739,7 +739,7 @@
         </div>
     @endif
 
-    {{-- ============================ ROLLBACK CONFIRM MODAL ============================ --}}
+    {{-- ROLLBACK CONFIRMATION MODAL --}}
     @if ($showRollbackConfirmModal)
         <div class="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="rollback-modal-title">
             <div class="flex min-h-full items-center justify-center p-4">
@@ -772,7 +772,7 @@
         </div>
     @endif
 
-    {{-- ============================ DELETE ROW MODAL ============================ --}}
+    {{-- DELETE ROW MODAL --}}
     @if ($showDeleteModal)
         <div class="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
             <div class="flex min-h-full items-center justify-center p-4">

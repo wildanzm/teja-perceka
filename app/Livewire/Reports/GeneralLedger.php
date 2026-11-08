@@ -33,7 +33,7 @@ class GeneralLedger extends Component
     {
         $user = Auth::user();
 
-        // Kepala unit: kunci ke unit sendiri
+        // A unit head is pinned to their own unit.
         if ($user->hasRole('kepala_unit')) {
             $this->unit_id = $user->business_unit_id;
         } elseif (empty($this->unit_id)) {
@@ -98,7 +98,7 @@ class GeneralLedger extends Component
     }
 
     /**
-     * Kepala desa dan pengawas hanya melihat angka: tanpa blok tanda tangan.
+     * Kepala desa and pengawas see the figures only, with no signature block.
      */
     #[Computed]
     public function showSignature(): bool
@@ -185,8 +185,9 @@ class GeneralLedger extends Component
                 $totalDebit = $transactions->sum('debit');
                 $totalCredit = $transactions->sum('credit');
 
-                // BUMDes scope: inject virtual entries (saldo sebelumnya + net income per unit)
-                // into the transaction list for cash (1-1100), equity (3-2000), and revenue (4-2000) accounts.
+                // BUMDes scope: virtual entries (prior cash balance + per-unit net income) are
+                // injected into the transaction list for cash (1-1100), equity (3-2000) and
+                // revenue (4-2000) accounts.
                 if ($this->isBumdesScope() && in_array($selectedAccount->code, ['1-1100', '1-1200', '3-2000', '4-2000'])) {
                     $isCash = in_array($selectedAccount->code, ['1-1100', '1-1200']);
                     $virtualEntries = BumdesCashBalance::getBumdesVirtualEntries($startDate, $endDate);
@@ -212,7 +213,7 @@ class GeneralLedger extends Component
         return compact('transactions', 'openingBalance', 'selectedAccount', 'normalBalance', 'totalDebit', 'totalCredit');
     }
 
-    // ─── Preview PDF (inline, via ReportPreviewController) ────────────────
+    // Preview PDF (inline, via ReportPreviewController)
 
     /**
      * Build the ledger PDF for inline preview.
@@ -271,7 +272,10 @@ class GeneralLedger extends Component
     public function render()
     {
         $user = Auth::user();
-        if ($user && $user->hasRole('kepala_unit') && $this->unit_id !== $user->business_unit_id) {
+        // Pin a unit head to their own unit on every render. Compared as strings because
+        // wire:model submits unit_id as a string while the column is an int, so a strict
+        // !== between the two would re-assign on every request.
+        if ($user && $user->hasRole('kepala_unit') && (string) $this->unit_id !== (string) $user->business_unit_id) {
             $this->unit_id = $user->business_unit_id;
         }
 

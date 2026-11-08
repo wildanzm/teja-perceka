@@ -168,7 +168,7 @@ class RevenueTab extends Component
      * (they have no journal equivalent), but the headline figures always
      * match the profit/loss report.
      *
-     * BUMDes scope: revenue = saldo sebelumnya + net income per unit,
+     * BUMDes scope: revenue = prior cash balance + per-unit net income;
      * expenses = total KBM entries.
      *
      * @return array{0: float, 1: float}

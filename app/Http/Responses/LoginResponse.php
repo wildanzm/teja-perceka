@@ -9,7 +9,8 @@ use Laravel\Fortify\Fortify;
 class LoginResponse implements LoginResponseContract
 {
     /**
-     * Tahan redirect: tampilkan modal sukses dulu, redirect jalan setelah modal selesai.
+     * Defer the redirect: show the success modal first and navigate once it closes, so the
+     * operator sees confirmation instead of being bounced away mid-action.
      */
     public function toResponse($request): mixed
     {
@@ -22,7 +23,8 @@ class LoginResponse implements LoginResponseContract
     }
 
     /**
-     * Hanya izinkan redirect internal (anti open-redirect).
+     * Restrict the post-login target to an internal path, so a crafted `next` parameter
+     * cannot turn the login form into an open redirect.
      */
     private function safeRedirect(Request $request, mixed $next): string
     {

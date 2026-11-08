@@ -16,7 +16,7 @@
             line-height: 1.4;
         }
 
-        /* ── HEADER ── */
+        /* HEADER */
         .doc-header {
             text-align: center;
             margin-bottom: 20px;
@@ -25,7 +25,7 @@
         .doc-header .title   { font-size: 12px; font-weight: bold; text-transform: uppercase; margin-top: 3px; }
         .doc-header .period  { font-size: 11px; font-weight: bold; text-transform: uppercase; color: #000; margin-top: 2px; }
 
-        /* ── TABLE ── */
+        /* TABLE */
         .data-table {
             width: 100%;
             border-collapse: collapse;
@@ -53,7 +53,7 @@
         .c { text-align: center; }
         .r { text-align: right; }
 
-        /* LABA BERSIH - baris pembuka tebal */
+        /* NET INCOME - bold opening row */
         .row-laba td {
             font-weight: bold;
             font-size: 12px;
@@ -61,12 +61,12 @@
             border-bottom: 2px solid #171717;
         }
 
-        /* Baris pos alokasi (indent) */
+        /* Allocation item rows (indented) */
         .row-item td:first-child {
             padding-left: 20px;
         }
 
-        /* Laba setelah pengurang - penutup seksi */
+        /* Profit after deductions - section closing */
         .row-setelah td {
             font-weight: bold;
             border-top: 1px solid #a3a3a3;
@@ -74,7 +74,7 @@
             background-color: #f9f9f9;
         }
 
-        /* Judul seksi AD/ART */
+        /* AD/ART section title */
         .row-section td {
             font-weight: bold;
             text-transform: uppercase;
@@ -85,7 +85,7 @@
             border-bottom: 1px solid #e5e5e5;
         }
 
-        /* Total AD/ART */
+        /* AD/ART total */
         .row-total td {
             font-weight: bold;
             border-bottom: none;
@@ -98,7 +98,7 @@
             color: #737373;
         }
 
-        /* ── SUMMARY BOX ── */
+        /* SUMMARY BOX */
         .summary-box {
             width: 100%;
             margin-top: 18px;
@@ -114,7 +114,7 @@
             width: 50%;
         }
 
-        /* ── FOOTER ── */
+        /* FOOTER */
         .footer-sig {
             width: 100%;
             margin-top: 36px;
@@ -151,13 +151,13 @@
             </tr>
         </thead>
         <tbody>
-            {{-- Laba bersih --}}
+            {{-- Net income --}}
             <tr class="row-laba">
                 <td colspan="3">LABA BERSIH</td>
                 <td class="r">Rp {{ number_format($netIncome, 0, ',', '.') }}</td>
             </tr>
 
-            {{-- Pos pengurang --}}
+            {{-- Deduction items --}}
             @forelse($deductionRows as $row)
                 <tr class="row-item">
                     <td>
@@ -180,13 +180,13 @@
                 </tr>
             @endforelse
 
-            {{-- Laba setelah pengurang --}}
+            {{-- Profit after deductions --}}
             <tr class="row-setelah">
                 <td colspan="3">Laba/Rugi Bersih setelah {{ $deductionLabel }}</td>
                 <td class="r">Rp {{ number_format($netIncomeAfterDeductions, 0, ',', '.') }}</td>
             </tr>
 
-            {{-- Seksi AD/ART --}}
+            {{-- AD/ART section --}}
             <tr class="row-section">
                 <td colspan="4">Alokasi Laba Bersih sesuai AD/ART</td>
             </tr>
@@ -213,7 +213,7 @@
                 </tr>
             @endforelse
 
-            {{-- Total AD/ART --}}
+            {{-- AD/ART total --}}
             @if(count($adArtRows) > 0)
                 <tr class="row-total">
                     <td colspan="2">TOTAL AD/ART</td>
@@ -232,7 +232,7 @@
         </tbody>
     </table>
 
-    {{-- Ringkasan (sama dengan kartu ringkasan pada halaman alokasi laba) --}}
+    {{-- Summary (mirrors the summary cards on the profit allocation page) --}}
     <table class="summary-box">
         <tr>
             <td class="lbl">Total Laba Bersih</td>

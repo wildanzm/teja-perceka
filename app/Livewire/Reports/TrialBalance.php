@@ -34,7 +34,7 @@ class TrialBalance extends Component
     {
         $user = Auth::user();
 
-        // Kepala unit: kunci ke unit sendiri
+        // A unit head is pinned to their own unit.
         if ($user->hasRole('kepala_unit')) {
             $this->unit_id = $user->business_unit_id;
         } elseif (empty($this->unit_id)) {
@@ -121,7 +121,7 @@ class TrialBalance extends Component
     }
 
     /**
-     * Kepala desa dan pengawas hanya melihat angka: tanpa blok tanda tangan.
+     * Kepala desa and pengawas see the figures only, with no signature block.
      */
     #[Computed]
     public function showSignature(): bool
@@ -173,8 +173,8 @@ class TrialBalance extends Component
             $this->applyReportScope($monthlyQuery);
             $balancePerAccount = $this->sumDebitCreditPerAccount($monthlyQuery);
 
-            // BUMDes scope: inject opening balance (Kas & Laba/Rugi Bulan Lalu)
-            // and current-month unit income (all units) via virtual entries.
+            // BUMDes scope: the opening balance (cash plus prior-month profit/loss) and the
+            // current month's unit income are injected as virtual entries.
             if ($this->isBumdesScope()) {
                 $openingBalance = BumdesCashBalance::getOpeningBalance($startDate);
                 $netUnitIncome = BumdesCashBalance::getTotalNetUnitIncome($startDate, $endDate);
@@ -336,7 +336,10 @@ class TrialBalance extends Component
     public function render()
     {
         $user = Auth::user();
-        if ($user && $user->hasRole('kepala_unit') && $this->unit_id !== $user->business_unit_id) {
+        // Pin a unit head to their own unit on every render. Compared as strings because
+        // wire:model submits unit_id as a string while the column is an int, so a strict
+        // !== between the two would re-assign on every request.
+        if ($user && $user->hasRole('kepala_unit') && (string) $this->unit_id !== (string) $user->business_unit_id) {
             $this->unit_id = $user->business_unit_id;
         }
 
