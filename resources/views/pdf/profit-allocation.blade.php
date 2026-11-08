@@ -147,7 +147,7 @@
                 <th>Keterangan</th>
                 <th class="c" style="width: 18%;">Jenis Alokasi</th>
                 <th class="c" style="width: 18%;">Metode Perhitungan</th>
-                <th class="r" style="width: 24%;">Jumlah (Rp)</th>
+                <th class="r" style="width: 24%;">Jumlah</th>
             </tr>
         </thead>
         <tbody>
