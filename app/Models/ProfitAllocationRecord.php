@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use Database\Factories\ProfitAllocationRecordFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ProfitAllocationRecord extends Model
 {
+    /** @use HasFactory<ProfitAllocationRecordFactory> */
     use HasFactory;
 
     protected $table = 'profit_allocation_history';

@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use Database\Factories\ProfitAllocationClosingFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ProfitAllocationClosing extends Model
 {
+    /** @use HasFactory<ProfitAllocationClosingFactory> */
     use HasFactory;
 
     protected $table = 'profit_allocation_closings';

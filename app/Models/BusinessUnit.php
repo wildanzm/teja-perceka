@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Database\Factories\BusinessUnitFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -17,6 +18,7 @@ use Illuminate\Support\Carbon;
  */
 class BusinessUnit extends Model
 {
+    /** @use HasFactory<BusinessUnitFactory> */
     use HasFactory;
 
     protected $table = 'business_units';

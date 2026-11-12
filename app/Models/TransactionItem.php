@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Database\Factories\TransactionItemFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -19,6 +20,7 @@ use Illuminate\Support\Carbon;
  */
 class TransactionItem extends Model
 {
+    /** @use HasFactory<TransactionItemFactory> */
     use HasFactory;
 
     protected $table = 'transaction_items';

@@ -158,7 +158,6 @@ class UserManager extends Component
         $user->update($data);
 
         if ($wasActive && ! $user->is_active) {
-            // ponytail: bump, don't scan sessions; EnsureSessionIsFresh logs them out next request
             $user->increment('session_version');
         }
 
@@ -269,7 +268,6 @@ class UserManager extends Component
 
     public function render()
     {
-        // ponytail: CASE sort in SQL, single source in RoleLabels
         [$roleOrder, $bindings] = RoleLabels::caseSql(User::class);
 
         $users = User::with(['roles', 'businessUnit'])

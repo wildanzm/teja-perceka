@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Database\Factories\AssetFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
@@ -18,6 +19,7 @@ use Illuminate\Support\Carbon;
  */
 class Asset extends Model
 {
+    /** @use HasFactory<AssetFactory> */
     use HasFactory;
 
     protected $table = 'assets';
